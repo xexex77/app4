@@ -1,0 +1,48 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "app4"
+version = "0.1.0"
+description = "TTT-Linear (Sun et al. 2407.04620) Llama-style backbone with attention replaced by TTT mixer"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+  "torch>=2.4",
+  "tqdm>=4.66",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.2",
+  "ruff>=0.6.9",
+]
+triton = [
+  "triton>=3.0.0",
+]
+deepspeed = [
+  "deepspeed>=0.14.5",
+]
+
+[tool.setuptools.packages.find]
+include = ["app4*"]
+
+[tool.setuptools]
+py-modules = ["sitecustomize"]
+
+[tool.pytest.ini_options]
+testpaths = ["app4/tests"]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]
+ignore = ["E203"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["app4"]
+
