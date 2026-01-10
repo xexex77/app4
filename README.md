@@ -98,8 +98,44 @@ Includes:
 ## Smoke train (synthetic)
 
 ```bash
-python -m app4.ttt.train.train --config bringup_1p3b --synthetic --steps 2 --seq-len 64 --batch-size 1 --device cpu --precision fp32 --save-every 1 --ckpt-dir checkpoints/smoke
-python -m app4.ttt.train.train --config bringup_1p3b --synthetic --steps 3 --seq-len 64 --batch-size 1 --device cpu --precision fp32 --resume checkpoints/smoke
+python -m app4.ttt.train.train --config bringup_1p3b --steps 1 --seq-len 32 --batch-size 1 --device cpu --precision fp32 --synthetic --save-every 1 --ckpt-dir checkpoints/smoke
+python -m app4.ttt.train.train --config bringup_1p3b --steps 2 --seq-len 32 --batch-size 1 --device cpu --precision fp32 --synthetic --resume checkpoints/smoke
+```
+
+---
+
+## Supported distributed strategy (v1)
+
+- `--strategy none`: single-process (default)
+- `--strategy fsdp`: **classic FSDP only** (checkpoint-compatible sharded state_dict)
+
+Unsupported strategies (fail fast): `deepspeed`, `fsdp2`, composable sharding.
+
+---
+
+## Smoke train + checkpoint round-trip (classic FSDP)
+
+```bash
+torchrun --standalone --nproc_per_node=2 -m app4.ttt.train.train --config bringup_1p3b --steps 1 --seq-len 32 --batch-size 1 --device cpu --precision fp32 --synthetic --save-every 1 --ckpt-dir checkpoints/smoke --strategy fsdp
+torchrun --standalone --nproc_per_node=2 -m app4.ttt.train.train --config bringup_1p3b --steps 2 --seq-len 32 --batch-size 1 --device cpu --precision fp32 --synthetic --resume checkpoints/smoke --ckpt-dir checkpoints/smoke --strategy fsdp
+```
+
+---
+
+## Real data training (tiny.txt + SentencePiece) — non-demo gate
+
+```bash
+python -m app4.ttt.train.train --config bringup_1p3b --steps 200 --seq-len 128 --batch-size 1 --device cpu --precision fp32 --dataset app4/ttt/data/assets/tiny.txt --tokenizer spm_train
+```
+
+Note: on CPU the train script will automatically switch large configs to `debug_tiny` unless you pass `--allow-large-cpu`.
+
+---
+
+## Benchmark: dual vs primal (GPU perf gate)
+
+```bash
+python -m app4.ttt.utils.bench_ttt --device cuda --dtype bf16 --batch 16 --heads 64 --head-dim 128 --chunk 16 --assert-speedup 1.5
 ```
 
 ---
@@ -110,5 +146,5 @@ python -m app4.ttt.train.train --config bringup_1p3b --synthetic --steps 3 --seq
 python -m app4.ttt.inference.generate --config bringup_1p3b --prompt-tokens "1,2,3,4" --max-new-tokens 16
 ```
 
-This is token-id based (no tokenizer bundled yet).
+This is token-id based. (Training provides a SentencePiece bring-up tokenizer via `--tokenizer spm_train`, but inference is still token-id driven.)
 

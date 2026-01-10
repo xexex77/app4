@@ -204,7 +204,9 @@ class TTTLinearMixer(nn.Module):
 
         self.rope = RotaryEmbedding(cfg.head_dim, theta=cfg.rope_theta)
 
-    def init_state(self, batch_size: int, *, device: torch.device, dtype: torch.dtype) -> torch.Tensor:
+    def init_state(
+        self, batch_size: int, *, device: torch.device, dtype: torch.dtype
+    ) -> torch.Tensor:
         # IMPORTANT: do not use .expand without materializing a copy; that would share
         # storage across the batch dimension and corrupt per-sequence isolation.
         w0 = self.W0.to(device=device, dtype=torch.float32)
@@ -244,7 +246,9 @@ class TTTLinearMixer(nn.Module):
         eta = eta.transpose(1, 2).contiguous()  # (B,H,T)
         return eta.to(dtype=x_model.dtype)
 
-    def _qkv_eta(self, x: torch.Tensor, start_pos: int) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+    def _qkv_eta(
+        self, x: torch.Tensor, start_pos: int
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         # x: (B,T,d_model) -> q,k,v: (B,H,T,d), eta: (B,H,T)
         q = self._shape(self.w_q(x))
         k = self._shape(self.w_k(x))
@@ -284,7 +288,8 @@ class TTTLinearMixer(nn.Module):
         if self.training and not use_dual:
             raise ValueError(
                 "Training must use anchored MBGD semantics (dual form). "
-                "Call with use_dual=True for training/prefill; use_dual=False is reserved for decode/online GD."
+                "Call with use_dual=True for training/prefill; "
+                "use_dual=False is reserved for decode/online GD."
             )
 
         if not use_dual:
@@ -321,7 +326,7 @@ class TTTLinearMixer(nn.Module):
             seg_end = min(seg_start + seg_tokens, tlen)
             x_seg = x[:, seg_start:seg_end, :]
 
-            def _segment_fn(W_in: torch.Tensor, x_in: torch.Tensor):
+            def _segment_fn(W_in: torch.Tensor, x_in: torch.Tensor, seg_start=seg_start):
                 q, k, v, eta = self._qkv_eta(x_in, start_pos=start_pos + seg_start)
 
                 z_chunks = []

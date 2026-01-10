@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import argparse
 import os
+import tempfile
 import time
 from contextlib import nullcontext
 from dataclasses import dataclass
-import tempfile
 from pathlib import Path
 
 import torch
@@ -13,11 +13,19 @@ import torch.distributed as dist
 import torch.nn.functional as F
 from torch.optim import AdamW
 
+from app4.ttt.data.datasets import load_token_ids
+from app4.ttt.data.sampler import ShardedTokenStream, dist_rank_world
+from app4.ttt.data.tokenizer import (
+    SentencePieceTokenizer,
+    SentencePieceTrainConfig,
+    train_sentencepiece,
+)
 from app4.ttt.model.configs import get_config
 from app4.ttt.model.llama_ttt import TTTLlamaForCausalLM
 from app4.ttt.train.fsdp import FSDPConfig, wrap_fsdp
 from app4.ttt.utils.checkpointing import load_checkpoint, save_checkpoint
 from app4.ttt.utils.logging import log_rank0, setup_logging
+from app4.ttt.utils.rng import get_rng_state, set_rng_state
 from app4.ttt.utils.seed import seed_all
 
 
@@ -27,6 +35,7 @@ class TrainArgs:
     strategy: str
     precision: str
     device: str
+    seed: int
     steps: int
     seq_len: int
     batch_size: int
@@ -35,16 +44,31 @@ class TrainArgs:
     warmup: int
     grad_clip: float
     synthetic: bool
+    dataset: str | None
+    tokenizer: str | None
+    tokenizer_model: str | None
+    tokenizer_vocab_size: int | None
     save_every: int
     ckpt_dir: str
     resume: str | None
     allow_large_cpu: bool
 
 
-def setup_dist():
+def setup_dist(*, device: torch.device | None = None):
     if "RANK" in os.environ and "WORLD_SIZE" in os.environ:
         init_method = os.environ.get("APP4_DIST_INIT_METHOD")
-        backend = "nccl" if torch.cuda.is_available() else "gloo"
+        if device is not None:
+            # IMPORTANT: backend must follow the requested device, not mere CUDA availability.
+            # Step-7 gate runs FSDP under `torchrun ... --device cpu`, which should use gloo even
+            # on GPU machines.
+            if device.type == "cpu":
+                backend = "gloo"
+            elif device.type == "cuda":
+                backend = "nccl"
+            else:
+                backend = "gloo"
+        else:
+            backend = "nccl" if torch.cuda.is_available() else "gloo"
         if init_method:
             dist.init_process_group(
                 backend=backend,
@@ -71,7 +95,7 @@ def setup_dist():
                 )
             else:
                 dist.init_process_group(backend=backend, init_method="env://")
-        if torch.cuda.is_available():
+        if device is not None and device.type == "cuda":
             torch.cuda.set_device(int(os.environ.get("LOCAL_RANK", "0")))
 
 
@@ -89,9 +113,11 @@ def cosine_with_warmup(step: int, *, warmup: int, total: int):
 def parse_args() -> TrainArgs:
     p = argparse.ArgumentParser()
     p.add_argument("--config", type=str, default="bringup_1p3b")
-    p.add_argument("--strategy", type=str, choices=["none", "fsdp", "deepspeed"], default="none")
+    # DeepSpeed is intentionally unsupported in v1 (must be real or removed).
+    p.add_argument("--strategy", type=str, choices=["none", "fsdp"], default="none")
     p.add_argument("--precision", type=str, choices=["fp32", "bf16"], default="bf16")
     p.add_argument("--device", type=str, default="cuda" if torch.cuda.is_available() else "cpu")
+    p.add_argument("--seed", type=int, default=1234)
     p.add_argument("--steps", type=int, default=100)
     p.add_argument("--seq-len", type=int, default=512)
     p.add_argument("--batch-size", type=int, default=1)
@@ -100,6 +126,34 @@ def parse_args() -> TrainArgs:
     p.add_argument("--warmup", type=int, default=100)
     p.add_argument("--grad-clip", type=float, default=1.0)
     p.add_argument("--synthetic", action="store_true")
+    p.add_argument(
+        "--dataset",
+        type=str,
+        default=None,
+        help="Path to a real text dataset (e.g. tiny.txt).",
+    )
+    p.add_argument(
+        "--tokenizer",
+        type=str,
+        choices=["spm_train", "spm_model"],
+        default=None,
+        help="Tokenizer backend (required when --dataset is set).",
+    )
+    p.add_argument(
+        "--tokenizer-model",
+        type=str,
+        default=None,
+        help="Path to a SentencePiece .model (spm_model).",
+    )
+    p.add_argument(
+        "--tokenizer-vocab-size",
+        type=int,
+        default=None,
+        help=(
+            "Requested SentencePiece vocab size when using spm_train "
+            "(defaults to config vocab_size)."
+        ),
+    )
     p.add_argument("--save-every", type=int, default=200)
     p.add_argument("--ckpt-dir", type=str, default="checkpoints/run1")
     p.add_argument("--resume", type=str, default=None)
@@ -115,6 +169,7 @@ def parse_args() -> TrainArgs:
         strategy=args.strategy,
         precision=args.precision,
         device=args.device,
+        seed=int(args.seed),
         steps=args.steps,
         seq_len=args.seq_len,
         batch_size=args.batch_size,
@@ -123,6 +178,10 @@ def parse_args() -> TrainArgs:
         warmup=args.warmup,
         grad_clip=args.grad_clip,
         synthetic=bool(args.synthetic),
+        dataset=args.dataset,
+        tokenizer=args.tokenizer,
+        tokenizer_model=args.tokenizer_model,
+        tokenizer_vocab_size=args.tokenizer_vocab_size,
         save_every=args.save_every,
         ckpt_dir=args.ckpt_dir,
         resume=args.resume,
@@ -132,12 +191,18 @@ def parse_args() -> TrainArgs:
 
 def main():
     a = parse_args()
+    device = torch.device(a.device)
     logger = setup_logging()
-    setup_dist()
-    seed_all(1234)
+    setup_dist(device=device)
+    rank, world = dist_rank_world()
+    seed_all(int(a.seed))
+
+    if a.synthetic and a.dataset:
+        raise ValueError("--synthetic and --dataset are mutually exclusive.")
+    if (a.dataset is not None) and (a.tokenizer is None):
+        raise ValueError("--tokenizer is required when using --dataset.")
 
     cfg_name = a.config
-    device = torch.device(a.device)
 
     # Safety: avoid accidentally trying to run 1.3B+ configs on CPU in dev/CI.
     # This keeps the CLI command stable while making it runnable on CPU.
@@ -149,7 +214,44 @@ def main():
         )
         cfg_name = "debug_tiny"
 
-    cfg = get_config(cfg_name)
+    base_cfg = get_config(cfg_name)
+
+    # Real data pipeline (non-demo gate): tokenizer + deterministic token stream.
+    tokenizer = None
+    token_stream = None
+    cfg = base_cfg
+    if a.dataset is not None:
+        ckpt_dir = Path(a.ckpt_dir)
+        tok_dir = ckpt_dir / "tokenizer"
+        tok_dir.mkdir(parents=True, exist_ok=True)
+
+        if a.tokenizer == "spm_train":
+            model_prefix = tok_dir / "spm"
+            model_file = model_prefix.with_suffix(".model")
+            if (rank == 0) and (not model_file.exists()):
+                req_vocab = int(a.tokenizer_vocab_size or base_cfg.vocab_size)
+                train_sentencepiece(
+                    input_path=a.dataset,
+                    model_prefix=model_prefix,
+                    cfg=SentencePieceTrainConfig(vocab_size=req_vocab, seed=int(a.seed)),
+                )
+            if dist.is_available() and dist.is_initialized():
+                dist.barrier()
+            tokenizer = SentencePieceTokenizer(model_file)
+        elif a.tokenizer == "spm_model":
+            if not a.tokenizer_model:
+                raise ValueError("--tokenizer-model is required for --tokenizer spm_model.")
+            tokenizer = SentencePieceTokenizer(a.tokenizer_model)
+        else:
+            raise ValueError(f"Unsupported tokenizer: {a.tokenizer!r}")
+
+        # Override vocab size to match the tokenizer.
+        cfg = get_config(cfg_name, vocab_size=tokenizer.vocab_size)
+
+        tokens = load_token_ids(a.dataset, tokenizer=tokenizer)
+        token_stream = ShardedTokenStream(
+            tokens, seq_len=a.seq_len, batch_size=a.batch_size, rank=rank, world_size=world
+        )
 
     model = TTTLlamaForCausalLM(cfg).to(device=device)
     if a.precision == "bf16" and device.type == "cuda":
@@ -163,7 +265,15 @@ def main():
 
     start_step = 0
     if a.resume:
-        start_step = load_checkpoint(a.resume, model=model, optimizer=optim, scheduler=None)
+        start_step, meta, rng_state = load_checkpoint(
+            a.resume, model=model, optimizer=optim, scheduler=None
+        )
+        if rng_state is not None:
+            set_rng_state(rng_state)
+        if token_stream is not None:
+            data_state = (meta.get("extra") or {}).get("data_state", None)
+            if isinstance(data_state, dict):
+                token_stream.load_state_dict(data_state)
         log_rank0(logger, f"Resumed from {a.resume} at step={start_step}")
 
     model.train()
@@ -175,8 +285,14 @@ def main():
         for pg in optim.param_groups:
             pg["lr"] = a.lr * lr_scale
 
-        # synthetic next-token data
-        input_ids = torch.randint(0, cfg.vocab_size, (a.batch_size, a.seq_len), device=device, dtype=torch.long)
+        if a.dataset is not None:
+            assert token_stream is not None
+            input_ids = token_stream.next_batch().to(device=device)
+        else:
+            # synthetic next-token data
+            input_ids = torch.randint(
+                0, cfg.vocab_size, (a.batch_size, a.seq_len), device=device, dtype=torch.long
+            )
 
         # forward (grad always enabled; autocast only for CUDA bf16)
         autocast_ctx = (
@@ -202,16 +318,39 @@ def main():
         tokens += a.batch_size * a.seq_len
         if is_rank0() and (step % 10 == 0 or step == a.steps - 1):
             dt = time.time() - t0
+            lr = optim.param_groups[0]["lr"]
+            toks_per_s = tokens / max(1e-6, dt)
             log_rank0(
                 logger,
-                f"step={step} loss={loss.item():.4f} lr={optim.param_groups[0]['lr']:.3e} toks/s={tokens/max(1e-6, dt):.1f}",
+                f"step={step} loss={loss.item():.4f} lr={lr:.3e} toks/s={toks_per_s:.1f}",
             )
 
-        if is_rank0() and a.save_every > 0 and step > 0 and (step % a.save_every == 0):
-            save_checkpoint(a.ckpt_dir, model=model, optimizer=optim, scheduler=None, step=step, cfg=cfg)
+        # NOTE: under FSDP, state_dict collection uses collective comms; all ranks must
+        # participate even if only rank0 writes metadata.
+        if a.save_every > 0 and step > 0 and (step % a.save_every == 0):
+            extra = {"data_state": token_stream.state_dict() if token_stream is not None else None}
+            save_checkpoint(
+                a.ckpt_dir,
+                model=model,
+                optimizer=optim,
+                scheduler=None,
+                step=step + 1,
+                cfg=cfg,
+                extra=extra,
+                rng_state=get_rng_state(),
+            )
 
-    if is_rank0():
-        save_checkpoint(a.ckpt_dir, model=model, optimizer=optim, scheduler=None, step=a.steps, cfg=cfg)
+    extra = {"data_state": token_stream.state_dict() if token_stream is not None else None}
+    save_checkpoint(
+        a.ckpt_dir,
+        model=model,
+        optimizer=optim,
+        scheduler=None,
+        step=a.steps,
+        cfg=cfg,
+        extra=extra,
+        rng_state=get_rng_state(),
+    )
 
 
 if __name__ == "__main__":

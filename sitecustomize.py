@@ -47,7 +47,6 @@ def _should_patch() -> bool:
 
 if _should_patch():  # pragma: no cover
     try:
-        import torch
         import torch.distributed as dist
 
         _OrigTCPStore = dist.TCPStore

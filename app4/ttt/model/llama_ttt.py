@@ -55,7 +55,9 @@ class TTTLlamaBlock(nn.Module):
         self.mixer = TTTLinearMixer(mixer_cfg)
         self.mlp = SwiGLUMLP(cfg.d_model, cfg.ffn_dim)
 
-    def init_state(self, batch_size: int, *, device: torch.device, dtype: torch.dtype) -> torch.Tensor:
+    def init_state(
+        self, batch_size: int, *, device: torch.device, dtype: torch.dtype
+    ) -> torch.Tensor:
         return self.mixer.init_state(batch_size, device=device, dtype=dtype)
 
     def forward(
@@ -100,8 +102,12 @@ class TTTLlamaForCausalLM(nn.Module):
             self.lm_head.weight = self.tok_embeddings.weight
 
     def init_cache(self, batch_size: int, *, device: torch.device, dtype: torch.dtype) -> TTTCache:
-        # Fast weights are always stored in fp32 for stability. (Compute casts happen inside the mixer.)
-        W = [layer.init_state(batch_size, device=device, dtype=torch.float32) for layer in self.layers]
+        # Fast weights are always stored in fp32 for stability.
+        # (Compute casts happen inside the mixer.)
+        W = [
+            layer.init_state(batch_size, device=device, dtype=torch.float32)
+            for layer in self.layers
+        ]
         return TTTCache(W=W, pos=0)
 
     def reset_cache(self, cache: TTTCache):

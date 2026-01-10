@@ -5,7 +5,6 @@ import os
 import tempfile
 from pathlib import Path
 
-import torch
 import torch.multiprocessing as mp
 
 

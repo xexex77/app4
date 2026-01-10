@@ -3,7 +3,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Literal
 
-
 ConfigName = Literal["debug_tiny", "bringup_1p3b", "mid_35b", "ttt_llama_47b", "ttt_llama_70b"]
 
 
@@ -39,7 +38,12 @@ class TTTLMConfig:
         assert self.n_layers > 0
 
 
-def get_config(name: ConfigName, *, vocab_size: int | None = None, rope_theta: float | None = None) -> TTTLMConfig:
+def get_config(
+    name: ConfigName,
+    *,
+    vocab_size: int | None = None,
+    rope_theta: float | None = None,
+) -> TTTLMConfig:
     if name == "debug_tiny":
         cfg = TTTLMConfig(
             vocab_size=4096,

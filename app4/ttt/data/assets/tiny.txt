@@ -1,0 +1,22 @@
+TTT-Linear tiny dataset (for deterministic bring-up).
+
+the quick brown fox jumps over the lazy dog.
+pack my box with five dozen liquor jugs.
+sphinx of black quartz, judge my vow.
+
+hello world hello world hello world.
+hello world hello world hello world.
+hello world hello world hello world.
+
+we train on real text so the pipeline is not demo-ware.
+we train on real text so the pipeline is not demo-ware.
+we train on real text so the pipeline is not demo-ware.
+
+abababababababababababababababab
+abababababababababababababababab
+abababababababababababababababab
+
+the model should learn simple patterns quickly.
+the model should learn simple patterns quickly.
+the model should learn simple patterns quickly.
+

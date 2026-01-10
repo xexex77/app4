@@ -13,7 +13,10 @@ def _as_broadcastable(param: torch.Tensor | None, x: torch.Tensor) -> torch.Tens
     if param.ndim == 2:
         # (H,d) -> (1,H,1,d) for x (B,H,T,d)
         if x.ndim != 4:
-            raise ValueError(f"Expected x to be (B,H,T,d) when param is (H,d); got {tuple(x.shape)}")
+            raise ValueError(
+                "Expected x to be (B,H,T,d) when param is (H,d); "
+                f"got {tuple(x.shape)}"
+            )
         h, d = param.shape
         if x.shape[1] != h or x.shape[-1] != d:
             raise ValueError(f"Param (H,d)={param.shape} not compatible with x={tuple(x.shape)}")

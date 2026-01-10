@@ -2,7 +2,6 @@ from __future__ import annotations
 
 # Triton kernels are optional. This file provides a hook point for future fusion.
 # The correctness-critical reference path is the PyTorch dual form in `layers/ttt_linear.py`.
-
 from dataclasses import dataclass
 
 try:
