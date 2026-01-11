@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import argparse
+import json
 import os
+import shutil
+import subprocess
 import tempfile
 import time
 from contextlib import nullcontext
@@ -50,6 +53,8 @@ class TrainArgs:
     tokenizer_model: str | None
     tokenizer_vocab_size: int | None
     save_every: int
+    save_optimizer: bool
+    max_checkpoints: int
     no_save: bool
     log_every: int
     ckpt_dir: str
@@ -126,6 +131,108 @@ def cosine_with_warmup(step: int, *, warmup: int, total: int):
     return 0.5 * (1.0 + torch.cos(torch.tensor(progress * 3.1415926535))).item()
 
 
+def _repo_root() -> Path:
+    # .../app4/app4/ttt/train/train.py -> repo root is .../app4
+    return Path(__file__).resolve().parents[3]
+
+
+def _git_sha() -> str:
+    try:
+        out = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=str(_repo_root()))
+        return out.decode("utf-8", errors="replace").strip()
+    except Exception:
+        return "unknown"
+
+
+def _list_step_checkpoints(ckpt_dir: Path) -> list[tuple[int, Path]]:
+    if not ckpt_dir.exists():
+        return []
+    out: list[tuple[int, Path]] = []
+    for p in ckpt_dir.iterdir():
+        if p.is_dir() and p.name.startswith("step_") and p.name[5:].isdigit():
+            out.append((int(p.name[5:]), p))
+    out.sort(key=lambda x: x[0])
+    return out
+
+
+def _latest_checkpoint_dir(ckpt_dir: Path) -> Path | None:
+    ckpts = _list_step_checkpoints(ckpt_dir)
+    if ckpts:
+        return ckpts[-1][1]
+    # Back-compat: old layout wrote meta.json directly under ckpt_dir.
+    if (ckpt_dir / "meta.json").exists():
+        return ckpt_dir
+    return None
+
+
+def _resolve_resume_dir(*, resume: str | None, ckpt_dir: Path) -> Path | None:
+    if resume is None:
+        return None
+    norm = resume.strip().lower()
+    if norm in {"", "none", "false", "0"}:
+        return None
+    if norm == "auto":
+        manifest = ckpt_dir / "checkpoint_manifest.json"
+        if manifest.exists():
+            try:
+                data = json.loads(manifest.read_text())
+                rel = data.get("checkpoint_dir", None)
+                if isinstance(rel, str) and rel:
+                    p = ckpt_dir / rel
+                    if p.is_dir() and (p / "meta.json").exists():
+                        return p
+            except Exception:
+                pass
+        return _latest_checkpoint_dir(ckpt_dir)
+
+    p = Path(resume)
+    if p.is_dir():
+        if (p / "meta.json").exists():
+            return p
+        return _latest_checkpoint_dir(p)
+    raise ValueError(f"--resume path does not exist or is not a directory: {resume!r}")
+
+
+def _write_checkpoint_manifest(
+    *,
+    ckpt_dir: Path,
+    checkpoint_dir: Path,
+    step: int,
+    cfg_name: str,
+    tokenizer: str | None,
+    dataset: str | None,
+    world_size: int,
+    seed: int,
+    save_optimizer: bool,
+):
+    rel = os.path.relpath(str(checkpoint_dir), start=str(ckpt_dir))
+    payload = {
+        "format": 1,
+        "step": int(step),
+        "checkpoint_dir": rel,
+        "config": cfg_name,
+        "tokenizer": tokenizer,
+        "dataset": dataset,
+        "git_sha": _git_sha(),
+        "world_size": int(world_size),
+        "seed": int(seed),
+        "save_optimizer": int(bool(save_optimizer)),
+    }
+    (ckpt_dir / "checkpoint_manifest.json").write_text(json.dumps(payload, indent=2))
+
+
+def _prune_checkpoints(*, ckpt_dir: Path, max_checkpoints: int, logger):
+    if max_checkpoints <= 0:
+        return
+    ckpts = _list_step_checkpoints(ckpt_dir)
+    if len(ckpts) <= max_checkpoints:
+        return
+    to_delete = ckpts[: len(ckpts) - max_checkpoints]
+    for step, p in to_delete:
+        log_rank0(logger, f"pruning old checkpoint: step={step} dir={p}")
+        shutil.rmtree(p, ignore_errors=True)
+
+
 def parse_args() -> TrainArgs:
     p = argparse.ArgumentParser()
     p.add_argument("--config", type=str, default="bringup_1p3b")
@@ -171,6 +278,8 @@ def parse_args() -> TrainArgs:
         ),
     )
     p.add_argument("--save-every", type=int, default=200)
+    p.add_argument("--save_optimizer", "--save-optimizer", type=int, choices=[0, 1], default=1)
+    p.add_argument("--max_checkpoints", "--max-checkpoints", type=int, default=3)
     p.add_argument(
         "--no-save",
         action="store_true",
@@ -178,7 +287,12 @@ def parse_args() -> TrainArgs:
     )
     p.add_argument("--log-every", type=int, default=10)
     p.add_argument("--ckpt-dir", type=str, default="checkpoints/run1")
-    p.add_argument("--resume", type=str, default=None)
+    p.add_argument(
+        "--resume",
+        type=str,
+        default="auto",
+        help="Checkpoint resume mode: 'auto' (default), 'none', or a checkpoint directory path.",
+    )
     p.add_argument(
         "--allow-large-cpu",
         action="store_true",
@@ -205,6 +319,8 @@ def parse_args() -> TrainArgs:
         tokenizer_model=args.tokenizer_model,
         tokenizer_vocab_size=args.tokenizer_vocab_size,
         save_every=args.save_every,
+        save_optimizer=bool(int(args.save_optimizer)),
+        max_checkpoints=int(args.max_checkpoints),
         no_save=bool(args.no_save),
         log_every=int(args.log_every),
         ckpt_dir=args.ckpt_dir,
@@ -239,13 +355,13 @@ def main():
         cfg_name = "debug_tiny"
 
     base_cfg = get_config(cfg_name)
+    ckpt_dir = Path(a.ckpt_dir)
 
     # Real data pipeline (non-demo gate): tokenizer + deterministic token stream.
     tokenizer = None
     token_stream = None
     cfg = base_cfg
     if a.dataset is not None:
-        ckpt_dir = Path(a.ckpt_dir)
         tok_dir = ckpt_dir / "tokenizer"
         tok_dir.mkdir(parents=True, exist_ok=True)
 
@@ -295,9 +411,21 @@ def main():
     optim = AdamW(model.parameters(), lr=a.lr, weight_decay=a.weight_decay, betas=(0.9, 0.95))
 
     start_step = 0
-    if a.resume:
+    resume_dir = None
+    if dist.is_available() and dist.is_initialized():
+        # Resolve resume path on rank0 and broadcast to all ranks for consistency.
+        obj_list = [""]
+        if is_rank0():
+            resume_dir = _resolve_resume_dir(resume=a.resume, ckpt_dir=ckpt_dir)
+            obj_list[0] = str(resume_dir) if resume_dir is not None else ""
+        dist.broadcast_object_list(obj_list, src=0)
+        resume_dir = Path(obj_list[0]) if obj_list[0] else None
+    else:
+        resume_dir = _resolve_resume_dir(resume=a.resume, ckpt_dir=ckpt_dir)
+
+    if resume_dir is not None:
         start_step, meta, rng_state = load_checkpoint(
-            a.resume, model=model, optimizer=optim, scheduler=None
+            resume_dir, model=model, optimizer=optim, scheduler=None
         )
         if rng_state is not None:
             set_rng_state(rng_state)
@@ -305,7 +433,7 @@ def main():
             data_state = (meta.get("extra") or {}).get("data_state", None)
             if isinstance(data_state, dict):
                 token_stream.load_state_dict(data_state)
-        log_rank0(logger, f"Resumed from {a.resume} at step={start_step}")
+        log_rank0(logger, f"Resumed from {resume_dir} at step={start_step}")
 
     model.train()
     tokens = 0
@@ -407,15 +535,16 @@ def main():
             and ((step + 1) % a.save_every == 0)
         ):
             extra = {"data_state": token_stream.state_dict() if token_stream is not None else None}
+            ckpt_path = ckpt_dir / f"step_{step+1:09d}"
             if is_rank0():
-                log_rank0(logger, f"saving checkpoint: step={step+1} dir={a.ckpt_dir}")
+                log_rank0(logger, f"saving checkpoint: step={step+1} dir={ckpt_path}")
             if device.type == "cuda":
                 torch.cuda.synchronize(device=device)
             ckpt_t0 = time.perf_counter()
             save_checkpoint(
-                a.ckpt_dir,
+                ckpt_path,
                 model=model,
-                optimizer=optim,
+                optimizer=optim if a.save_optimizer else None,
                 scheduler=None,
                 step=step + 1,
                 cfg=cfg,
@@ -427,18 +556,35 @@ def main():
             if is_rank0():
                 dt_s = time.perf_counter() - ckpt_t0
                 log_rank0(logger, f"checkpoint saved: step={step+1} dt_s={dt_s:.1f}")
+                _write_checkpoint_manifest(
+                    ckpt_dir=ckpt_dir,
+                    checkpoint_dir=ckpt_path,
+                    step=step + 1,
+                    cfg_name=cfg_name,
+                    tokenizer=a.tokenizer,
+                    dataset=a.dataset,
+                    world_size=world,
+                    seed=int(a.seed),
+                    save_optimizer=bool(a.save_optimizer),
+                )
+                _prune_checkpoints(
+                    ckpt_dir=ckpt_dir, max_checkpoints=int(a.max_checkpoints), logger=logger
+                )
+            if dist.is_available() and dist.is_initialized():
+                dist.barrier()
 
     if not a.no_save:
         extra = {"data_state": token_stream.state_dict() if token_stream is not None else None}
+        ckpt_path = ckpt_dir / f"step_{a.steps:09d}"
         if is_rank0():
-            log_rank0(logger, f"saving final checkpoint: step={a.steps} dir={a.ckpt_dir}")
+            log_rank0(logger, f"saving final checkpoint: step={a.steps} dir={ckpt_path}")
         if device.type == "cuda":
             torch.cuda.synchronize(device=device)
         ckpt_t0 = time.perf_counter()
         save_checkpoint(
-            a.ckpt_dir,
+            ckpt_path,
             model=model,
-            optimizer=optim,
+            optimizer=optim if a.save_optimizer else None,
             scheduler=None,
             step=a.steps,
             cfg=cfg,
@@ -450,6 +596,22 @@ def main():
         if is_rank0():
             dt_s = time.perf_counter() - ckpt_t0
             log_rank0(logger, f"final checkpoint saved: step={a.steps} dt_s={dt_s:.1f}")
+            _write_checkpoint_manifest(
+                ckpt_dir=ckpt_dir,
+                checkpoint_dir=ckpt_path,
+                step=a.steps,
+                cfg_name=cfg_name,
+                tokenizer=a.tokenizer,
+                dataset=a.dataset,
+                world_size=world,
+                seed=int(a.seed),
+                save_optimizer=bool(a.save_optimizer),
+            )
+            _prune_checkpoints(
+                ckpt_dir=ckpt_dir, max_checkpoints=int(a.max_checkpoints), logger=logger
+            )
+        if dist.is_available() and dist.is_initialized():
+            dist.barrier()
 
     # Clean shutdown to avoid NCCL/Gloo resource leak warnings.
     if dist.is_available() and dist.is_initialized():

@@ -125,14 +125,16 @@ def load_checkpoint(
             model.load_state_dict(msd)
 
         if optimizer is not None:
-            osd = _load_any(path / f"optim_rank{rank}.pt")
-            with FSDP.state_dict_type(
-                model,
-                StateDictType.SHARDED_STATE_DICT,
-                optim_state_dict_config=ShardedOptimStateDictConfig(offload_to_cpu=True),
-            ):
-                to_load = FSDP.optim_state_dict_to_load(model, optimizer, osd)
-            optimizer.load_state_dict(to_load)
+            optim_file = path / f"optim_rank{rank}.pt"
+            if optim_file.exists():
+                osd = _load_any(optim_file)
+                with FSDP.state_dict_type(
+                    model,
+                    StateDictType.SHARDED_STATE_DICT,
+                    optim_state_dict_config=ShardedOptimStateDictConfig(offload_to_cpu=True),
+                ):
+                    to_load = FSDP.optim_state_dict_to_load(model, optimizer, osd)
+                optimizer.load_state_dict(to_load)
         if dist.is_available() and dist.is_initialized():
             dist.barrier()
     else:
