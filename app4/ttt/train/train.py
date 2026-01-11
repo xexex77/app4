@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import os
 import shutil
 import subprocess
@@ -60,6 +61,11 @@ class TrainArgs:
     ckpt_dir: str
     resume: str | None
     allow_large_cpu: bool
+    eval_only: bool
+    eval_steps: int
+    eval_split: float
+    profile_steps: int
+    profile_dir: str | None
 
 
 def setup_dist(*, device: torch.device | None = None):
@@ -298,6 +304,36 @@ def parse_args() -> TrainArgs:
         action="store_true",
         help="Allow running very large configs on CPU (may OOM / be extremely slow).",
     )
+    p.add_argument(
+        "--eval-only",
+        action="store_true",
+        help="Run evaluation on a held-out shard of --dataset and exit.",
+    )
+    p.add_argument(
+        "--eval-steps",
+        type=int,
+        default=0,
+        help="Number of eval batches to run on the held-out shard (0 disables eval).",
+    )
+    p.add_argument(
+        "--eval-split",
+        type=float,
+        default=0.1,
+        help="Fraction of dataset tokens used for eval (taken from the end) when eval is enabled.",
+    )
+    p.add_argument(
+        "--profile-steps",
+        "--profile_steps",
+        type=int,
+        default=0,
+        help="Enable torch.profiler for N steps (CUDA only). Writes trace files outside the repo.",
+    )
+    p.add_argument(
+        "--profile-dir",
+        type=str,
+        default=None,
+        help="Directory to write torch.profiler traces (rank0). Defaults to ~/runs/prof/<run>.",
+    )
     args = p.parse_args()
 
     return TrainArgs(
@@ -326,6 +362,11 @@ def parse_args() -> TrainArgs:
         ckpt_dir=args.ckpt_dir,
         resume=args.resume,
         allow_large_cpu=bool(args.allow_large_cpu),
+        eval_only=bool(args.eval_only),
+        eval_steps=int(args.eval_steps),
+        eval_split=float(args.eval_split),
+        profile_steps=int(args.profile_steps),
+        profile_dir=args.profile_dir,
     )
 
 
@@ -341,6 +382,18 @@ def main():
         raise ValueError("--synthetic and --dataset are mutually exclusive.")
     if (a.dataset is not None) and (a.tokenizer is None):
         raise ValueError("--tokenizer is required when using --dataset.")
+    if a.eval_only and a.dataset is None:
+        raise ValueError("--eval-only requires --dataset (and --tokenizer).")
+    if a.eval_only and a.eval_steps <= 0:
+        raise ValueError("--eval-only requires --eval-steps > 0.")
+    if a.eval_steps < 0:
+        raise ValueError("--eval-steps must be >= 0.")
+    if not (0.0 < float(a.eval_split) < 1.0):
+        raise ValueError("--eval-split must be in (0, 1).")
+    if a.profile_steps < 0:
+        raise ValueError("--profile-steps must be >= 0.")
+    if a.profile_steps > 0 and device.type != "cuda":
+        raise ValueError("--profile-steps is only supported on CUDA.")
 
     cfg_name = a.config
 
@@ -360,6 +413,7 @@ def main():
     # Real data pipeline (non-demo gate): tokenizer + deterministic token stream.
     tokenizer = None
     token_stream = None
+    eval_stream = None
     cfg = base_cfg
     if a.dataset is not None:
         tok_dir = ckpt_dir / "tokenizer"
@@ -397,6 +451,18 @@ def main():
         token_stream = ShardedTokenStream(
             tokens, seq_len=a.seq_len, batch_size=a.batch_size, rank=rank, world_size=world
         )
+        if a.eval_only or a.eval_steps > 0:
+            n = int(tokens.numel())
+            split_at = int(float(n) * (1.0 - float(a.eval_split)))
+            split_at = max(0, min(split_at, max(0, n - 1)))
+            eval_tokens = tokens[split_at:].contiguous()
+            eval_stream = ShardedTokenStream(
+                eval_tokens,
+                seq_len=a.seq_len,
+                batch_size=a.batch_size,
+                rank=rank,
+                world_size=world,
+            )
 
     model = TTTLlamaForCausalLM(cfg)
     if a.precision == "bf16" and device.type == "cuda":
@@ -429,11 +495,61 @@ def main():
         )
         if rng_state is not None:
             set_rng_state(rng_state)
-        if token_stream is not None:
+        if token_stream is not None and (not a.eval_only):
             data_state = (meta.get("extra") or {}).get("data_state", None)
             if isinstance(data_state, dict):
                 token_stream.load_state_dict(data_state)
         log_rank0(logger, f"Resumed from {resume_dir} at step={start_step}")
+
+    if a.eval_only:
+        if eval_stream is None:
+            raise ValueError("--eval-only requires --dataset (and therefore an eval token stream).")
+        if resume_dir is None:
+            raise ValueError("--eval-only requires a checkpoint (use --resume auto or a path).")
+
+        model.eval()
+        autocast_ctx = (
+            torch.autocast(device_type="cuda", dtype=torch.bfloat16)
+            if (a.precision == "bf16" and device.type == "cuda")
+            else nullcontext()
+        )
+        loss_sum = 0.0
+        for i in range(int(a.eval_steps)):
+            input_ids = eval_stream.next_batch().to(device=device)
+            with torch.no_grad(), autocast_ctx:
+                logits, _ = model(input_ids, cache=None, use_dual=True, checkpoint_ttt=False)
+                loss = F.cross_entropy(
+                    logits[:, :-1, :].reshape(-1, cfg.vocab_size),
+                    input_ids[:, 1:].reshape(-1),
+                )
+            if not torch.isfinite(loss.detach()):
+                raise RuntimeError(
+                    f"Non-finite eval loss at step={i}: {loss.detach().float().item()}"
+                )
+            loss_sum += float(loss.detach().float().item())
+
+        # Aggregate across ranks (each rank evaluates the same number of batches).
+        if dist.is_available() and dist.is_initialized():
+            t = torch.tensor([loss_sum, float(a.eval_steps)], device=device, dtype=torch.float32)
+            dist.all_reduce(t, op=dist.ReduceOp.SUM)
+            loss_sum = float(t[0].item())
+            denom = float(t[1].item())
+        else:
+            denom = float(a.eval_steps)
+
+        loss_avg = loss_sum / max(1.0, denom)
+        ppl = math.exp(loss_avg)
+        log_rank0(
+            logger,
+            f"eval loss={loss_avg:.4f} ppl={ppl:.2f} eval_steps={int(denom)} "
+            f"eval_split={a.eval_split:.3f} dataset={a.dataset}",
+        )
+
+        # Clean shutdown to avoid NCCL/Gloo resource leak warnings.
+        if dist.is_available() and dist.is_initialized():
+            dist.barrier()
+            dist.destroy_process_group()
+        return
 
     model.train()
     tokens = 0
@@ -449,129 +565,180 @@ def main():
     if is_rank0() and a.no_save:
         log_rank0(logger, "Checkpoint saving disabled (--no-save).")
 
-    for step in range(start_step, a.steps):
-        lr_scale = cosine_with_warmup(step, warmup=a.warmup, total=a.steps)
-        for pg in optim.param_groups:
-            pg["lr"] = a.lr * lr_scale
+    prof = None
+    if a.profile_steps > 0 and device.type == "cuda":
+        from torch.profiler import ProfilerActivity, profile, tensorboard_trace_handler
 
-        if a.dataset is not None:
-            assert token_stream is not None
-            input_ids = token_stream.next_batch().to(device=device)
-        else:
-            # synthetic next-token data
-            input_ids = torch.randint(
-                0, cfg.vocab_size, (a.batch_size, a.seq_len), device=device, dtype=torch.long
-            )
-
-        # forward (grad always enabled; autocast only for CUDA bf16)
-        autocast_ctx = (
-            torch.autocast(device_type="cuda", dtype=torch.bfloat16)
-            if (a.precision == "bf16" and device.type == "cuda")
-            else nullcontext()
+        base = Path(os.path.expanduser("~/runs/prof"))
+        run_dir = (
+            Path(a.profile_dir)
+            if a.profile_dir is not None
+            else (base / f"{cfg_name}_T{a.seq_len}_profile_{int(time.time())}")
         )
-        with autocast_ctx:
-            logits, _ = model(input_ids, cache=None, use_dual=True, checkpoint_ttt=True)
-            loss = F.cross_entropy(
-                logits[:, :-1, :].reshape(-1, cfg.vocab_size),
-                input_ids[:, 1:].reshape(-1),
-            )
+        if is_rank0():
+            run_dir.mkdir(parents=True, exist_ok=True)
+            log_rank0(logger, f"Profiler enabled: profile_steps={a.profile_steps} dir={run_dir}")
+        if dist.is_available() and dist.is_initialized():
+            dist.barrier()
 
-        optim.zero_grad(set_to_none=True)
-        loss.backward()
-
-        if not torch.isfinite(loss.detach()):
-            raise RuntimeError(f"Non-finite loss at step={step}: {loss.detach().float().item()}")
-
-        grad_norm = None
-        if a.grad_clip > 0:
-            grad_norm = torch.nn.utils.clip_grad_norm_(model.parameters(), a.grad_clip)
-
-        optim.step()
-        interval_steps += 1
-
-        tokens += a.batch_size * a.seq_len
-        do_log = (
-            a.log_every > 0
-            and (step % a.log_every == 0 or step == a.steps - 1)
-            and is_rank0()
+        prof = profile(
+            activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA],
+            schedule=torch.profiler.schedule(
+                wait=0, warmup=0, active=int(a.profile_steps), repeat=1
+            ),
+            on_trace_ready=(tensorboard_trace_handler(str(run_dir)) if is_rank0() else None),
+            record_shapes=False,
+            profile_memory=True,
+            with_stack=False,
         )
-        if do_log:
-            if device.type == "cuda":
-                torch.cuda.synchronize(device=device)
-            dt = time.perf_counter() - interval_t0
-            step_s = dt / max(1, interval_steps)
-            toks_per_s = float(tokens_per_step_global * interval_steps) / max(1e-9, dt)
+        prof.__enter__()
 
-            peak_mem_gb = 0.0
-            if device.type == "cuda":
-                peak_mem_gb = float(torch.cuda.max_memory_allocated(device=device)) / 1e9
+    try:
+        for step in range(start_step, a.steps):
+            lr_scale = cosine_with_warmup(step, warmup=a.warmup, total=a.steps)
+            for pg in optim.param_groups:
+                pg["lr"] = a.lr * lr_scale
 
-            gn = float("nan")
-            if grad_norm is not None:
-                try:
-                    gn = float(grad_norm)
-                except TypeError:
-                    gn = float(grad_norm.item())
+            if a.dataset is not None:
+                assert token_stream is not None
+                input_ids = token_stream.next_batch().to(device=device)
+            else:
+                # synthetic next-token data
+                input_ids = torch.randint(
+                    0, cfg.vocab_size, (a.batch_size, a.seq_len), device=device, dtype=torch.long
+                )
 
-            lr = float(optim.param_groups[0]["lr"])
-            log_rank0(
-                logger,
-                f"step={step} loss={loss.detach().float().item():.4f} grad_norm={gn:.3e} "
-                f"step_s={step_s:.3f} toks/s={toks_per_s:.1f} "
-                f"peak_mem_gb={peak_mem_gb:.2f} lr={lr:.3e}",
+            # forward (grad always enabled; autocast only for CUDA bf16)
+            autocast_ctx = (
+                torch.autocast(device_type="cuda", dtype=torch.bfloat16)
+                if (a.precision == "bf16" and device.type == "cuda")
+                else nullcontext()
             )
+            with autocast_ctx:
+                logits, _ = model(input_ids, cache=None, use_dual=True, checkpoint_ttt=True)
+                loss = F.cross_entropy(
+                    logits[:, :-1, :].reshape(-1, cfg.vocab_size),
+                    input_ids[:, 1:].reshape(-1),
+                )
 
-            interval_t0 = time.perf_counter()
-            interval_steps = 0
-            if device.type == "cuda":
-                torch.cuda.reset_peak_memory_stats(device=device)
+            optim.zero_grad(set_to_none=True)
+            loss.backward()
 
-        # NOTE: under FSDP, state_dict collection uses collective comms; all ranks must
-        # participate even if only rank0 writes metadata.
-        if (
-            (not a.no_save)
-            and a.save_every > 0
-            and (step + 1) < a.steps
-            and ((step + 1) % a.save_every == 0)
-        ):
-            extra = {"data_state": token_stream.state_dict() if token_stream is not None else None}
-            ckpt_path = ckpt_dir / f"step_{step+1:09d}"
-            if is_rank0():
-                log_rank0(logger, f"saving checkpoint: step={step+1} dir={ckpt_path}")
-            if device.type == "cuda":
-                torch.cuda.synchronize(device=device)
-            ckpt_t0 = time.perf_counter()
-            save_checkpoint(
-                ckpt_path,
-                model=model,
-                optimizer=optim if a.save_optimizer else None,
-                scheduler=None,
-                step=step + 1,
-                cfg=cfg,
-                extra=extra,
-                rng_state=get_rng_state(),
+            if not torch.isfinite(loss.detach()):
+                raise RuntimeError(
+                    f"Non-finite loss at step={step}: {loss.detach().float().item()}"
+                )
+
+            grad_norm = None
+            if a.grad_clip > 0:
+                grad_norm = torch.nn.utils.clip_grad_norm_(model.parameters(), a.grad_clip)
+
+            optim.step()
+            interval_steps += 1
+
+            tokens += a.batch_size * a.seq_len
+            do_log = (
+                a.log_every > 0
+                and (step % a.log_every == 0 or step == a.steps - 1)
+                and is_rank0()
             )
-            if device.type == "cuda":
-                torch.cuda.synchronize(device=device)
-            if is_rank0():
-                dt_s = time.perf_counter() - ckpt_t0
-                log_rank0(logger, f"checkpoint saved: step={step+1} dt_s={dt_s:.1f}")
-                _write_checkpoint_manifest(
-                    ckpt_dir=ckpt_dir,
-                    checkpoint_dir=ckpt_path,
+            if do_log:
+                if device.type == "cuda":
+                    torch.cuda.synchronize(device=device)
+                dt = time.perf_counter() - interval_t0
+                step_s = dt / max(1, interval_steps)
+                toks_per_s = float(tokens_per_step_global * interval_steps) / max(1e-9, dt)
+
+                peak_mem_gb = 0.0
+                if device.type == "cuda":
+                    peak_mem_gb = float(torch.cuda.max_memory_allocated(device=device)) / 1e9
+
+                gn = float("nan")
+                if grad_norm is not None:
+                    try:
+                        gn = float(grad_norm)
+                    except TypeError:
+                        gn = float(grad_norm.item())
+
+                lr = float(optim.param_groups[0]["lr"])
+                log_rank0(
+                    logger,
+                    f"step={step} loss={loss.detach().float().item():.4f} grad_norm={gn:.3e} "
+                    f"step_s={step_s:.3f} toks/s={toks_per_s:.1f} "
+                    f"peak_mem_gb={peak_mem_gb:.2f} lr={lr:.3e}",
+                )
+
+                interval_t0 = time.perf_counter()
+                interval_steps = 0
+                if device.type == "cuda":
+                    torch.cuda.reset_peak_memory_stats(device=device)
+
+            # NOTE: under FSDP, state_dict collection uses collective comms; all ranks must
+            # participate even if only rank0 writes metadata.
+            if (
+                (not a.no_save)
+                and a.save_every > 0
+                and (step + 1) < a.steps
+                and ((step + 1) % a.save_every == 0)
+            ):
+                extra = {
+                    "data_state": token_stream.state_dict() if token_stream is not None else None
+                }
+                ckpt_path = ckpt_dir / f"step_{step+1:09d}"
+                if is_rank0():
+                    log_rank0(logger, f"saving checkpoint: step={step+1} dir={ckpt_path}")
+                if device.type == "cuda":
+                    torch.cuda.synchronize(device=device)
+                ckpt_t0 = time.perf_counter()
+                save_checkpoint(
+                    ckpt_path,
+                    model=model,
+                    optimizer=optim if a.save_optimizer else None,
+                    scheduler=None,
                     step=step + 1,
-                    cfg_name=cfg_name,
-                    tokenizer=a.tokenizer,
-                    dataset=a.dataset,
-                    world_size=world,
-                    seed=int(a.seed),
-                    save_optimizer=bool(a.save_optimizer),
+                    cfg=cfg,
+                    extra=extra,
+                    rng_state=get_rng_state(),
                 )
-                _prune_checkpoints(
-                    ckpt_dir=ckpt_dir, max_checkpoints=int(a.max_checkpoints), logger=logger
-                )
-            if dist.is_available() and dist.is_initialized():
-                dist.barrier()
+                if device.type == "cuda":
+                    torch.cuda.synchronize(device=device)
+                if is_rank0():
+                    dt_s = time.perf_counter() - ckpt_t0
+                    log_rank0(logger, f"checkpoint saved: step={step+1} dt_s={dt_s:.1f}")
+                    _write_checkpoint_manifest(
+                        ckpt_dir=ckpt_dir,
+                        checkpoint_dir=ckpt_path,
+                        step=step + 1,
+                        cfg_name=cfg_name,
+                        tokenizer=a.tokenizer,
+                        dataset=a.dataset,
+                        world_size=world,
+                        seed=int(a.seed),
+                        save_optimizer=bool(a.save_optimizer),
+                    )
+                    _prune_checkpoints(
+                        ckpt_dir=ckpt_dir, max_checkpoints=int(a.max_checkpoints), logger=logger
+                    )
+                if dist.is_available() and dist.is_initialized():
+                    dist.barrier()
+
+            if prof is not None:
+                prof.step()
+    finally:
+        if prof is not None:
+            prof.__exit__(None, None, None)
+            if is_rank0():
+                try:
+                    table = prof.key_averages().table(
+                        sort_by="self_cuda_time_total",
+                        row_limit=20,
+                    )
+                    log_rank0(
+                        logger,
+                        "\n" + table,
+                    )
+                except Exception:
+                    pass
 
     if not a.no_save:
         extra = {"data_state": token_stream.state_dict() if token_stream is not None else None}
