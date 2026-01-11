@@ -16,6 +16,7 @@ from torch.optim import AdamW
 from app4.ttt.data.datasets import load_token_ids
 from app4.ttt.data.sampler import ShardedTokenStream, dist_rank_world
 from app4.ttt.data.tokenizer import (
+    ByteTokenizer,
     SentencePieceTokenizer,
     SentencePieceTrainConfig,
     train_sentencepiece,
@@ -50,6 +51,7 @@ class TrainArgs:
     tokenizer_vocab_size: int | None
     save_every: int
     no_save: bool
+    log_every: int
     ckpt_dir: str
     resume: str | None
     allow_large_cpu: bool
@@ -149,7 +151,7 @@ def parse_args() -> TrainArgs:
     p.add_argument(
         "--tokenizer",
         type=str,
-        choices=["spm_train", "spm_model"],
+        choices=["bytes", "spm_train", "spm_model"],
         default=None,
         help="Tokenizer backend (required when --dataset is set).",
     )
@@ -174,6 +176,7 @@ def parse_args() -> TrainArgs:
         action="store_true",
         help="Disable all training checkpoint writes (including the final checkpoint).",
     )
+    p.add_argument("--log-every", type=int, default=10)
     p.add_argument("--ckpt-dir", type=str, default="checkpoints/run1")
     p.add_argument("--resume", type=str, default=None)
     p.add_argument(
@@ -203,6 +206,7 @@ def parse_args() -> TrainArgs:
         tokenizer_vocab_size=args.tokenizer_vocab_size,
         save_every=args.save_every,
         no_save=bool(args.no_save),
+        log_every=int(args.log_every),
         ckpt_dir=args.ckpt_dir,
         resume=args.resume,
         allow_large_cpu=bool(args.allow_large_cpu),
@@ -245,7 +249,9 @@ def main():
         tok_dir = ckpt_dir / "tokenizer"
         tok_dir.mkdir(parents=True, exist_ok=True)
 
-        if a.tokenizer == "spm_train":
+        if a.tokenizer == "bytes":
+            tokenizer = ByteTokenizer()
+        elif a.tokenizer == "spm_train":
             model_prefix = tok_dir / "spm"
             model_file = model_prefix.with_suffix(".model")
             if (rank == 0) and (not model_file.exists()):
@@ -265,8 +271,11 @@ def main():
         else:
             raise ValueError(f"Unsupported tokenizer: {a.tokenizer!r}")
 
-        # Override vocab size to match the tokenizer.
-        cfg = get_config(cfg_name, vocab_size=tokenizer.vocab_size)
+        # Keep the model config vocab size unless the tokenizer requires a larger vocab.
+        # (This lets us do real-data bring-up with small tokenizers while preserving the
+        # parameter count of large configs like ttt_llama_47b.)
+        if tokenizer.vocab_size > base_cfg.vocab_size:
+            cfg = get_config(cfg_name, vocab_size=tokenizer.vocab_size)
 
         tokens = load_token_ids(a.dataset, tokenizer=tokenizer)
         token_stream = ShardedTokenStream(
@@ -299,8 +308,15 @@ def main():
         log_rank0(logger, f"Resumed from {a.resume} at step={start_step}")
 
     model.train()
-    t0 = time.time()
     tokens = 0
+    world_size = dist.get_world_size() if (dist.is_available() and dist.is_initialized()) else 1
+    tokens_per_step_global = a.batch_size * a.seq_len * world_size
+
+    if device.type == "cuda":
+        torch.cuda.reset_peak_memory_stats(device=device)
+        torch.cuda.synchronize(device=device)
+    interval_t0 = time.perf_counter()
+    interval_steps = 0
 
     if is_rank0() and a.no_save:
         log_rank0(logger, "Checkpoint saving disabled (--no-save).")
@@ -335,25 +351,67 @@ def main():
         optim.zero_grad(set_to_none=True)
         loss.backward()
 
+        if not torch.isfinite(loss.detach()):
+            raise RuntimeError(f"Non-finite loss at step={step}: {loss.detach().float().item()}")
+
+        grad_norm = None
         if a.grad_clip > 0:
-            torch.nn.utils.clip_grad_norm_(model.parameters(), a.grad_clip)
+            grad_norm = torch.nn.utils.clip_grad_norm_(model.parameters(), a.grad_clip)
 
         optim.step()
+        interval_steps += 1
 
         tokens += a.batch_size * a.seq_len
-        if is_rank0() and (step % 10 == 0 or step == a.steps - 1):
-            dt = time.time() - t0
-            lr = optim.param_groups[0]["lr"]
-            toks_per_s = tokens / max(1e-6, dt)
+        do_log = (
+            a.log_every > 0
+            and (step % a.log_every == 0 or step == a.steps - 1)
+            and is_rank0()
+        )
+        if do_log:
+            if device.type == "cuda":
+                torch.cuda.synchronize(device=device)
+            dt = time.perf_counter() - interval_t0
+            step_s = dt / max(1, interval_steps)
+            toks_per_s = float(tokens_per_step_global * interval_steps) / max(1e-9, dt)
+
+            peak_mem_gb = 0.0
+            if device.type == "cuda":
+                peak_mem_gb = float(torch.cuda.max_memory_allocated(device=device)) / 1e9
+
+            gn = float("nan")
+            if grad_norm is not None:
+                try:
+                    gn = float(grad_norm)
+                except TypeError:
+                    gn = float(grad_norm.item())
+
+            lr = float(optim.param_groups[0]["lr"])
             log_rank0(
                 logger,
-                f"step={step} loss={loss.item():.4f} lr={lr:.3e} toks/s={toks_per_s:.1f}",
+                f"step={step} loss={loss.detach().float().item():.4f} grad_norm={gn:.3e} "
+                f"step_s={step_s:.3f} toks/s={toks_per_s:.1f} "
+                f"peak_mem_gb={peak_mem_gb:.2f} lr={lr:.3e}",
             )
+
+            interval_t0 = time.perf_counter()
+            interval_steps = 0
+            if device.type == "cuda":
+                torch.cuda.reset_peak_memory_stats(device=device)
 
         # NOTE: under FSDP, state_dict collection uses collective comms; all ranks must
         # participate even if only rank0 writes metadata.
-        if (not a.no_save) and a.save_every > 0 and step > 0 and (step % a.save_every == 0):
+        if (
+            (not a.no_save)
+            and a.save_every > 0
+            and (step + 1) < a.steps
+            and ((step + 1) % a.save_every == 0)
+        ):
             extra = {"data_state": token_stream.state_dict() if token_stream is not None else None}
+            if is_rank0():
+                log_rank0(logger, f"saving checkpoint: step={step+1} dir={a.ckpt_dir}")
+            if device.type == "cuda":
+                torch.cuda.synchronize(device=device)
+            ckpt_t0 = time.perf_counter()
             save_checkpoint(
                 a.ckpt_dir,
                 model=model,
@@ -364,9 +422,19 @@ def main():
                 extra=extra,
                 rng_state=get_rng_state(),
             )
+            if device.type == "cuda":
+                torch.cuda.synchronize(device=device)
+            if is_rank0():
+                dt_s = time.perf_counter() - ckpt_t0
+                log_rank0(logger, f"checkpoint saved: step={step+1} dt_s={dt_s:.1f}")
 
     if not a.no_save:
         extra = {"data_state": token_stream.state_dict() if token_stream is not None else None}
+        if is_rank0():
+            log_rank0(logger, f"saving final checkpoint: step={a.steps} dir={a.ckpt_dir}")
+        if device.type == "cuda":
+            torch.cuda.synchronize(device=device)
+        ckpt_t0 = time.perf_counter()
         save_checkpoint(
             a.ckpt_dir,
             model=model,
@@ -377,6 +445,11 @@ def main():
             extra=extra,
             rng_state=get_rng_state(),
         )
+        if device.type == "cuda":
+            torch.cuda.synchronize(device=device)
+        if is_rank0():
+            dt_s = time.perf_counter() - ckpt_t0
+            log_rank0(logger, f"final checkpoint saved: step={a.steps} dt_s={dt_s:.1f}")
 
     # Clean shutdown to avoid NCCL/Gloo resource leak warnings.
     if dist.is_available() and dist.is_initialized():

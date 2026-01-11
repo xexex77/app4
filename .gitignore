@@ -13,4 +13,5 @@ venv/
 
 checkpoints/
 runs/
+logs/
 

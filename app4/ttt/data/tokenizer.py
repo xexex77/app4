@@ -83,3 +83,23 @@ def train_sentencepiece(
     spm.SentencePieceTrainer.Train(" ".join(args))
     return model_prefix.with_suffix(".model")
 
+
+class ByteTokenizer:
+    """
+    Minimal, deterministic tokenizer:
+    - UTF-8 encode the input string and return raw bytes as token IDs (0..255)
+
+    This is useful for bring-up runs where you want a real-data path without
+    training a tokenizer.
+    """
+
+    @property
+    def vocab_size(self) -> int:
+        return 256
+
+    def encode(self, text: str) -> list[int]:
+        return list(text.encode("utf-8", errors="replace"))
+
+    def decode(self, ids: list[int]) -> str:
+        return bytes(int(i) & 0xFF for i in ids).decode("utf-8", errors="replace")
+
