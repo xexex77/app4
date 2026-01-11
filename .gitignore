@@ -16,3 +16,8 @@ runs/
 logs/
 
 datasets/
+
+# Allow docs runbooks (despite the generic `runs/` ignore above).
+!docs/
+!docs/runs/
+!docs/runs/**
