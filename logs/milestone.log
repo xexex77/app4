@@ -1,0 +1,234 @@
+=== bringup_1p3b real data (cuda bf16 fsdp, no-save) ===
+W0111 00:41:07.720000 31869 torch/distributed/run.py:803] 
+W0111 00:41:07.720000 31869 torch/distributed/run.py:803] *****************************************
+W0111 00:41:07.720000 31869 torch/distributed/run.py:803] Setting OMP_NUM_THREADS environment variable for each process to be 1 in default, to avoid your system being overloaded, please further tune the variable for optimal performance in your application as needed. 
+W0111 00:41:07.720000 31869 torch/distributed/run.py:803] *****************************************
+sentencepiece_trainer.cc(178) LOG(INFO) Running command: --input=app4/ttt/data/assets/tiny.txt --model_prefix=checkpoints/bringup_1p3b_real_gpu/tokenizer/spm --vocab_size=128256 --model_type=bpe --character_coverage=1.0 --unk_id=0 --bos_id=1 --eos_id=2 --pad_id=3 --hard_vocab_limit=false --shuffle_input_sentence=false
+sentencepiece_trainer.cc(78) LOG(INFO) Starts training with : 
+trainer_spec {
+  input: app4/ttt/data/assets/tiny.txt
+  input_format: 
+  model_prefix: checkpoints/bringup_1p3b_real_gpu/tokenizer/spm
+  model_type: BPE
+  vocab_size: 128256
+  self_test_sample_size: 0
+  character_coverage: 1
+  input_sentence_size: 0
+  shuffle_input_sentence: 0
+  seed_sentencepiece_size: 1000000
+  shrinking_factor: 0.75
+  max_sentence_length: 4192
+  num_threads: 16
+  num_sub_iterations: 2
+  max_sentencepiece_length: 16
+  split_by_unicode_script: 1
+  split_by_number: 1
+  split_by_whitespace: 1
+  split_digits: 0
+  pretokenization_delimiter: 
+  treat_whitespace_as_suffix: 0
+  allow_whitespace_only_pieces: 0
+  required_chars: 
+  byte_fallback: 0
+  vocabulary_output_piece_score: 1
+  train_extremely_large_corpus: 0
+  seed_sentencepieces_file: 
+  hard_vocab_limit: 0
+  use_all_vocab: 0
+  unk_id: 0
+  bos_id: 1
+  eos_id: 2
+  pad_id: 3
+  unk_piece: <unk>
+  bos_piece: <s>
+  eos_piece: </s>
+  pad_piece: <pad>
+  unk_surface:  ⁇ 
+  enable_differential_privacy: 0
+  differential_privacy_noise_level: 0
+  differential_privacy_clipping_threshold: 0
+}
+normalizer_spec {
+  name: nmt_nfkc
+  add_dummy_prefix: 1
+  remove_extra_whitespaces: 1
+  escape_whitespaces: 1
+  normalization_rule_tsv: 
+}
+denormalizer_spec {}
+trainer_interface.cc(355) LOG(INFO) SentenceIterator is not specified. Using MultiFileSentenceIterator.
+trainer_interface.cc(186) LOG(INFO) Loading corpus: app4/ttt/data/assets/tiny.txt
+trainer_interface.cc(411) LOG(INFO) Loaded all 16 sentences
+trainer_interface.cc(427) LOG(INFO) Adding meta_piece: <unk>
+trainer_interface.cc(427) LOG(INFO) Adding meta_piece: <s>
+trainer_interface.cc(427) LOG(INFO) Adding meta_piece: </s>
+trainer_interface.cc(427) LOG(INFO) Adding meta_piece: <pad>
+trainer_interface.cc(432) LOG(INFO) Normalizing sentences...
+trainer_interface.cc(541) LOG(INFO) all chars count=700
+trainer_interface.cc(562) LOG(INFO) Alphabet size=34
+trainer_interface.cc(563) LOG(INFO) Final character coverage=1
+trainer_interface.cc(594) LOG(INFO) Done! preprocessed 16 sentences.
+trainer_interface.cc(600) LOG(INFO) Tokenizing input sentences with whitespace: 16
+trainer_interface.cc(611) LOG(INFO) Done! 48
+bpe_model_trainer.cc(159) LOG(INFO) Updating active symbols. max_freq=48 min_freq=1
+bpe_model_trainer.cc(268) LOG(INFO) Added: freq=7 size=20 all=206 active=172 piece=de
+bpe_model_trainer.cc(268) LOG(INFO) Added: freq=3 size=40 all=245 active=211 piece=ex
+bpe_model_trainer.cc(268) LOG(INFO) Added: freq=3 size=60 all=258 active=224 piece=▁mo
+bpe_model_trainer.cc(268) LOG(INFO) Added: freq=3 size=80 all=248 active=214 piece=▁should
+bpe_model_trainer.cc(268) LOG(INFO) Added: freq=1 size=100 all=253 active=219 piece=ic
+bpe_model_trainer.cc(159) LOG(INFO) Updating active symbols. max_freq=1 min_freq=0
+bpe_model_trainer.cc(268) LOG(INFO) Added: freq=1 size=120 all=255 active=221 piece=min
+bpe_model_trainer.cc(268) LOG(INFO) Added: freq=1 size=140 all=250 active=216 piece=istic
+bpe_model_trainer.cc(268) LOG(INFO) Added: freq=1 size=160 all=233 active=199 piece=▁determin
+bpe_model_trainer.cc(268) LOG(INFO) Added: freq=0 size=180 all=214 active=180 piece=kl
+bpe_model_trainer.cc(268) LOG(INFO) Added: freq=0 size=200 all=194 active=160 piece=ps
+bpe_model_trainer.cc(159) LOG(INFO) Updating active symbols. max_freq=0 min_freq=0
+bpe_model_trainer.cc(268) LOG(INFO) Added: freq=0 size=220 all=174 active=140 piece=ud
+bpe_model_trainer.cc(268) LOG(INFO) Added: freq=0 size=240 all=154 active=120 piece=▁l
+bpe_model_trainer.cc(268) LOG(INFO) Added: freq=0 size=260 all=134 active=100 piece=fox
+bpe_model_trainer.cc(268) LOG(INFO) Added: freq=0 size=280 all=114 active=80 piece=ump
+bpe_model_trainer.cc(268) LOG(INFO) Added: freq=0 size=300 all=94 active=60 piece=▁wo
+bpe_model_trainer.cc(159) LOG(INFO) Updating active symbols. max_freq=0 min_freq=0
+bpe_model_trainer.cc(268) LOG(INFO) Added: freq=0 size=320 all=74 active=40 piece=▁fiv
+bpe_model_trainer.cc(268) LOG(INFO) Added: freq=0 size=340 all=54 active=20 piece=▁abab
+bpe_model_trainer.cc(252) LOG(WARNING) No valid symbol found
+trainer_interface.cc(689) LOG(INFO) Saving model: checkpoints/bringup_1p3b_real_gpu/tokenizer/spm.model
+trainer_interface.cc(701) LOG(INFO) Saving vocabs: checkpoints/bringup_1p3b_real_gpu/tokenizer/spm.vocab
+/home/ubuntu/work/app4/.venv/lib/python3.12/site-packages/torch/distributed/distributed_c10d.py:4876: UserWarning: barrier(): using the device under current context. You can specify `device_id` in `init_process_group` to mute this warning.
+  warnings.warn(  # warn only once
+[rank0]:[W111 00:41:20.922515958 ProcessGroupNCCL.cpp:5072] Guessing device ID based on global rank. This can cause a hang if rank to GPU mapping is heterogeneous. You can specify device_id in init_process_group()
+[rank0]: Traceback (most recent call last):
+[rank0]:   File "<frozen runpy>", line 198, in _run_module_as_main
+[rank0]:   File "<frozen runpy>", line 88, in _run_code
+[rank0]:   File "/home/ubuntu/work/app4/app4/ttt/train/train.py", line 368, in <module>
+[rank0]:     main()
+[rank0]:   File "/home/ubuntu/work/app4/app4/ttt/train/train.py", line 259, in main
+[rank0]:     token_stream = ShardedTokenStream(
+[rank0]:                    ^^^^^^^^^^^^^^^^^^^
+[rank0]:   File "/home/ubuntu/work/app4/app4/ttt/data/sampler.py", line 57, in __init__
+[rank0]:     raise ValueError(
+[rank0]: ValueError: Dataset shard too small for seq_len=128 on rank=0/8 (shard_tokens=17).
+[rank6]: Traceback (most recent call last):
+[rank6]:   File "<frozen runpy>", line 198, in _run_module_as_main
+[rank6]:   File "<frozen runpy>", line 88, in _run_code
+[rank6]:   File "/home/ubuntu/work/app4/app4/ttt/train/train.py", line 368, in <module>
+[rank6]:     main()
+[rank6]:   File "/home/ubuntu/work/app4/app4/ttt/train/train.py", line 259, in main
+[rank6]:     token_stream = ShardedTokenStream(
+[rank6]:                    ^^^^^^^^^^^^^^^^^^^
+[rank6]:   File "/home/ubuntu/work/app4/app4/ttt/data/sampler.py", line 57, in __init__
+[rank6]:     raise ValueError(
+[rank6]: ValueError: Dataset shard too small for seq_len=128 on rank=6/8 (shard_tokens=17).
+[rank7]: Traceback (most recent call last):
+[rank7]:   File "<frozen runpy>", line 198, in _run_module_as_main
+[rank7]:   File "<frozen runpy>", line 88, in _run_code
+[rank7]:   File "/home/ubuntu/work/app4/app4/ttt/train/train.py", line 368, in <module>
+[rank7]:     main()
+[rank7]:   File "/home/ubuntu/work/app4/app4/ttt/train/train.py", line 259, in main
+[rank7]:     token_stream = ShardedTokenStream(
+[rank7]:                    ^^^^^^^^^^^^^^^^^^^
+[rank7]:   File "/home/ubuntu/work/app4/app4/ttt/data/sampler.py", line 57, in __init__
+[rank7]:     raise ValueError(
+[rank7]: ValueError: Dataset shard too small for seq_len=128 on rank=7/8 (shard_tokens=17).
+[rank5]: Traceback (most recent call last):
+[rank5]:   File "<frozen runpy>", line 198, in _run_module_as_main
+[rank5]:   File "<frozen runpy>", line 88, in _run_code
+[rank5]:   File "/home/ubuntu/work/app4/app4/ttt/train/train.py", line 368, in <module>
+[rank5]:     main()
+[rank5]:   File "/home/ubuntu/work/app4/app4/ttt/train/train.py", line 259, in main
+[rank5]:     token_stream = ShardedTokenStream(
+[rank5]:                    ^^^^^^^^^^^^^^^^^^^
+[rank5]:   File "/home/ubuntu/work/app4/app4/ttt/data/sampler.py", line 57, in __init__
+[rank5]:     raise ValueError(
+[rank5]: ValueError: Dataset shard too small for seq_len=128 on rank=5/8 (shard_tokens=17).
+[rank2]: Traceback (most recent call last):
+[rank2]:   File "<frozen runpy>", line 198, in _run_module_as_main
+[rank2]:   File "<frozen runpy>", line 88, in _run_code
+[rank2]:   File "/home/ubuntu/work/app4/app4/ttt/train/train.py", line 368, in <module>
+[rank2]:     main()
+[rank2]:   File "/home/ubuntu/work/app4/app4/ttt/train/train.py", line 259, in main
+[rank2]:     token_stream = ShardedTokenStream(
+[rank2]:                    ^^^^^^^^^^^^^^^^^^^
+[rank2]:   File "/home/ubuntu/work/app4/app4/ttt/data/sampler.py", line 57, in __init__
+[rank2]:     raise ValueError(
+[rank2]: ValueError: Dataset shard too small for seq_len=128 on rank=2/8 (shard_tokens=17).
+[rank1]: Traceback (most recent call last):
+[rank1]:   File "<frozen runpy>", line 198, in _run_module_as_main
+[rank1]:   File "<frozen runpy>", line 88, in _run_code
+[rank1]:   File "/home/ubuntu/work/app4/app4/ttt/train/train.py", line 368, in <module>
+[rank1]:     main()
+[rank1]:   File "/home/ubuntu/work/app4/app4/ttt/train/train.py", line 259, in main
+[rank1]:     token_stream = ShardedTokenStream(
+[rank1]:                    ^^^^^^^^^^^^^^^^^^^
+[rank1]:   File "/home/ubuntu/work/app4/app4/ttt/data/sampler.py", line 57, in __init__
+[rank1]:     raise ValueError(
+[rank1]: ValueError: Dataset shard too small for seq_len=128 on rank=1/8 (shard_tokens=17).
+[rank3]: Traceback (most recent call last):
+[rank3]:   File "<frozen runpy>", line 198, in _run_module_as_main
+[rank3]:   File "<frozen runpy>", line 88, in _run_code
+[rank3]:   File "/home/ubuntu/work/app4/app4/ttt/train/train.py", line 368, in <module>
+[rank3]:     main()
+[rank3]:   File "/home/ubuntu/work/app4/app4/ttt/train/train.py", line 259, in main
+[rank3]:     token_stream = ShardedTokenStream(
+[rank3]:                    ^^^^^^^^^^^^^^^^^^^
+[rank3]:   File "/home/ubuntu/work/app4/app4/ttt/data/sampler.py", line 57, in __init__
+[rank3]:     raise ValueError(
+[rank3]: ValueError: Dataset shard too small for seq_len=128 on rank=3/8 (shard_tokens=17).
+[rank4]: Traceback (most recent call last):
+[rank4]:   File "<frozen runpy>", line 198, in _run_module_as_main
+[rank4]:   File "<frozen runpy>", line 88, in _run_code
+[rank4]:   File "/home/ubuntu/work/app4/app4/ttt/train/train.py", line 368, in <module>
+[rank4]:     main()
+[rank4]:   File "/home/ubuntu/work/app4/app4/ttt/train/train.py", line 259, in main
+[rank4]:     token_stream = ShardedTokenStream(
+[rank4]:                    ^^^^^^^^^^^^^^^^^^^
+[rank4]:   File "/home/ubuntu/work/app4/app4/ttt/data/sampler.py", line 57, in __init__
+[rank4]:     raise ValueError(
+[rank4]: ValueError: Dataset shard too small for seq_len=128 on rank=4/8 (shard_tokens=17).
+[rank0]:[W111 00:41:24.847453346 ProcessGroupNCCL.cpp:1524] Warning: WARNING: destroy_process_group() was not called before program exit, which can leak resources. For more info, please see https://pytorch.org/docs/stable/distributed.html#shutdown (function operator())
+W0111 00:41:25.244000 31869 torch/distributed/elastic/multiprocessing/api.py:908] Sending process 31998 closing signal SIGTERM
+W0111 00:41:25.245000 31869 torch/distributed/elastic/multiprocessing/api.py:908] Sending process 32000 closing signal SIGTERM
+W0111 00:41:25.245000 31869 torch/distributed/elastic/multiprocessing/api.py:908] Sending process 32001 closing signal SIGTERM
+W0111 00:41:25.245000 31869 torch/distributed/elastic/multiprocessing/api.py:908] Sending process 32002 closing signal SIGTERM
+W0111 00:41:25.246000 31869 torch/distributed/elastic/multiprocessing/api.py:908] Sending process 32003 closing signal SIGTERM
+W0111 00:41:25.246000 31869 torch/distributed/elastic/multiprocessing/api.py:908] Sending process 32004 closing signal SIGTERM
+W0111 00:41:25.246000 31869 torch/distributed/elastic/multiprocessing/api.py:908] Sending process 32005 closing signal SIGTERM
+E0111 00:41:26.577000 31869 torch/distributed/elastic/multiprocessing/api.py:882] failed (exitcode: 1) local_rank: 1 (pid: 31999) of binary: /home/ubuntu/work/app4/.venv/bin/python
+Traceback (most recent call last):
+  File "/home/ubuntu/work/app4/.venv/bin/torchrun", line 7, in <module>
+    sys.exit(main())
+             ^^^^^^
+  File "/home/ubuntu/work/app4/.venv/lib/python3.12/site-packages/torch/distributed/elastic/multiprocessing/errors/__init__.py", line 357, in wrapper
+    return f(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/work/app4/.venv/lib/python3.12/site-packages/torch/distributed/run.py", line 936, in main
+    run(args)
+  File "/home/ubuntu/work/app4/.venv/lib/python3.12/site-packages/torch/distributed/run.py", line 927, in run
+    elastic_launch(
+  File "/home/ubuntu/work/app4/.venv/lib/python3.12/site-packages/torch/distributed/launcher/api.py", line 156, in __call__
+    return launch_agent(self._config, self._entrypoint, list(args))
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/work/app4/.venv/lib/python3.12/site-packages/torch/distributed/launcher/api.py", line 293, in launch_agent
+    raise ChildFailedError(
+torch.distributed.elastic.multiprocessing.errors.ChildFailedError: 
+============================================================
+app4.ttt.train.train FAILED
+------------------------------------------------------------
+Failures:
+  <NO_OTHER_FAILURES>
+------------------------------------------------------------
+Root Cause (first observed failure):
+[0]:
+  time      : 2026-01-11_00:41:25
+  host      : 129-213-17-81
+  rank      : 1 (local_rank: 1)
+  exitcode  : 1 (pid: 31999)
+  error_file: <N/A>
+  traceback : To enable traceback see: https://pytorch.org/docs/stable/elastic/errors.html
+============================================================
+
+=== mid_35b smoke (cuda bf16 fsdp, no-save) ===
+W0111 00:41:28.722000 32217 torch/distributed/run.py:803] 
+W0111 00:41:28.722000 32217 torch/distributed/run.py:803] *****************************************
+W0111 00:41:28.722000 32217 torch/distributed/run.py:803] Setting OMP_NUM_THREADS environment variable for each process to be 1 in default, to avoid your system being overloaded, please further tune the variable for optimal performance in your application as needed. 
+W0111 00:41:28.722000 32217 torch/distributed/run.py:803] *****************************************

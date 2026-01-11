@@ -1,0 +1,11 @@
+[1m[91mE501 [0m[1mLine too long (107 > 100)[0m
+   [1m[94m-->[0m app4/ttt/model/llama_ttt.py:140:101
+    [1m[94m|[0m
+[1m[94m138 |[0m             W = [None for _ in self.layers]
+[1m[94m139 |[0m         else:
+[1m[94m140 |[0m             W = [layer.init_state(batch_size, device=device, dtype=torch.float32) for layer in self.layers]
+    [1m[94m|[0m                                                                                                     [1m[91m^^^^^^^[0m
+[1m[94m141 |[0m         return TTTCache(W=W, pos=0)
+    [1m[94m|[0m
+
+Found 1 error.

@@ -1,0 +1,147 @@
+W0111 01:06:18.847000 43107 torch/distributed/run.py:803] 
+W0111 01:06:18.847000 43107 torch/distributed/run.py:803] *****************************************
+W0111 01:06:18.847000 43107 torch/distributed/run.py:803] Setting OMP_NUM_THREADS environment variable for each process to be 1 in default, to avoid your system being overloaded, please further tune the variable for optimal performance in your application as needed. 
+W0111 01:06:18.847000 43107 torch/distributed/run.py:803] *****************************************
+[rank5]: Traceback (most recent call last):
+[rank5]:   File "<frozen runpy>", line 198, in _run_module_as_main
+[rank5]:   File "<frozen runpy>", line 88, in _run_code
+[rank5]:   File "/home/ubuntu/work/app4/app4/ttt/train/train.py", line 386, in <module>
+[rank5]:     main()
+[rank5]:   File "/home/ubuntu/work/app4/app4/ttt/train/train.py", line 276, in main
+[rank5]:     model = TTTLlamaForCausalLM(cfg).to(device=device)
+[rank5]:             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank5]:   File "/home/ubuntu/work/app4/.venv/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1371, in to
+[rank5]:     return self._apply(convert)
+[rank5]:            ^^^^^^^^^^^^^^^^^^^^
+[rank5]:   File "/home/ubuntu/work/app4/.venv/lib/python3.12/site-packages/torch/nn/modules/module.py", line 930, in _apply
+[rank5]:     module._apply(fn)
+[rank5]:   File "/home/ubuntu/work/app4/.venv/lib/python3.12/site-packages/torch/nn/modules/module.py", line 930, in _apply
+[rank5]:     module._apply(fn)
+[rank5]:   File "/home/ubuntu/work/app4/.venv/lib/python3.12/site-packages/torch/nn/modules/module.py", line 930, in _apply
+[rank5]:     module._apply(fn)
+[rank5]:   [Previous line repeated 1 more time]
+[rank5]:   File "/home/ubuntu/work/app4/.venv/lib/python3.12/site-packages/torch/nn/modules/module.py", line 957, in _apply
+[rank5]:     param_applied = fn(param)
+[rank5]:                     ^^^^^^^^^
+[rank5]:   File "/home/ubuntu/work/app4/.venv/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1357, in convert
+[rank5]:     return t.to(
+[rank5]:            ^^^^^
+[rank5]: torch.OutOfMemoryError: CUDA out of memory. Tried to allocate 896.00 MiB. GPU 5 has a total capacity of 178.36 GiB of which 6.12 MiB is free. Including non-PyTorch memory, this process has 178.34 GiB memory in use. Of the allocated memory 177.23 GiB is allocated by PyTorch, and 488.00 KiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)
+[rank1]: Traceback (most recent call last):
+[rank1]:   File "<frozen runpy>", line 198, in _run_module_as_main
+[rank1]:   File "<frozen runpy>", line 88, in _run_code
+[rank1]:   File "/home/ubuntu/work/app4/app4/ttt/train/train.py", line 386, in <module>
+[rank1]:     main()
+[rank1]:   File "/home/ubuntu/work/app4/app4/ttt/train/train.py", line 276, in main
+[rank1]:     model = TTTLlamaForCausalLM(cfg).to(device=device)
+[rank1]:             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank1]:   File "/home/ubuntu/work/app4/.venv/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1371, in to
+[rank1]:     return self._apply(convert)
+[rank1]:            ^^^^^^^^^^^^^^^^^^^^
+[rank1]:   File "/home/ubuntu/work/app4/.venv/lib/python3.12/site-packages/torch/nn/modules/module.py", line 930, in _apply
+[rank1]:     module._apply(fn)
+[rank1]:   File "/home/ubuntu/work/app4/.venv/lib/python3.12/site-packages/torch/nn/modules/module.py", line 930, in _apply
+[rank1]:     module._apply(fn)
+[rank1]:   File "/home/ubuntu/work/app4/.venv/lib/python3.12/site-packages/torch/nn/modules/module.py", line 930, in _apply
+[rank1]:     module._apply(fn)
+[rank1]:   [Previous line repeated 1 more time]
+[rank1]:   File "/home/ubuntu/work/app4/.venv/lib/python3.12/site-packages/torch/nn/modules/module.py", line 957, in _apply
+[rank1]:     param_applied = fn(param)
+[rank1]:                     ^^^^^^^^^
+[rank1]:   File "/home/ubuntu/work/app4/.venv/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1357, in convert
+[rank1]:     return t.to(
+[rank1]:            ^^^^^
+[rank1]: torch.OutOfMemoryError: CUDA out of memory. Tried to allocate 896.00 MiB. GPU 1 has a total capacity of 178.36 GiB of which 6.12 MiB is free. Including non-PyTorch memory, this process has 178.34 GiB memory in use. Of the allocated memory 177.23 GiB is allocated by PyTorch, and 488.00 KiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)
+[rank7]: Traceback (most recent call last):
+[rank7]:   File "<frozen runpy>", line 198, in _run_module_as_main
+[rank7]:   File "<frozen runpy>", line 88, in _run_code
+[rank7]:   File "/home/ubuntu/work/app4/app4/ttt/train/train.py", line 386, in <module>
+[rank7]:     main()
+[rank7]:   File "/home/ubuntu/work/app4/app4/ttt/train/train.py", line 276, in main
+[rank7]:     model = TTTLlamaForCausalLM(cfg).to(device=device)
+[rank7]:             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank7]:   File "/home/ubuntu/work/app4/.venv/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1371, in to
+[rank7]:     return self._apply(convert)
+[rank7]:            ^^^^^^^^^^^^^^^^^^^^
+[rank7]:   File "/home/ubuntu/work/app4/.venv/lib/python3.12/site-packages/torch/nn/modules/module.py", line 930, in _apply
+[rank7]:     module._apply(fn)
+[rank7]:   File "/home/ubuntu/work/app4/.venv/lib/python3.12/site-packages/torch/nn/modules/module.py", line 930, in _apply
+[rank7]:     module._apply(fn)
+[rank7]:   File "/home/ubuntu/work/app4/.venv/lib/python3.12/site-packages/torch/nn/modules/module.py", line 930, in _apply
+[rank7]:     module._apply(fn)
+[rank7]:   [Previous line repeated 1 more time]
+[rank7]:   File "/home/ubuntu/work/app4/.venv/lib/python3.12/site-packages/torch/nn/modules/module.py", line 957, in _apply
+[rank7]:     param_applied = fn(param)
+[rank7]:                     ^^^^^^^^^
+[rank7]:   File "/home/ubuntu/work/app4/.venv/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1357, in convert
+[rank7]:     return t.to(
+[rank7]:            ^^^^^
+[rank7]: torch.OutOfMemoryError: CUDA out of memory. Tried to allocate 896.00 MiB. GPU 7 has a total capacity of 178.36 GiB of which 6.12 MiB is free. Including non-PyTorch memory, this process has 178.34 GiB memory in use. Of the allocated memory 177.23 GiB is allocated by PyTorch, and 488.00 KiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)
+[rank5]:[W111 01:11:00.438698569 AllocatorConfig.cpp:28] Warning: PYTORCH_CUDA_ALLOC_CONF is deprecated, use PYTORCH_ALLOC_CONF instead (function operator())
+[rank1]:[W111 01:11:01.053908237 AllocatorConfig.cpp:28] Warning: PYTORCH_CUDA_ALLOC_CONF is deprecated, use PYTORCH_ALLOC_CONF instead (function operator())
+[rank6]: Traceback (most recent call last):
+[rank6]:   File "<frozen runpy>", line 198, in _run_module_as_main
+[rank6]:   File "<frozen runpy>", line 88, in _run_code
+[rank6]:   File "/home/ubuntu/work/app4/app4/ttt/train/train.py", line 386, in <module>
+[rank6]:     main()
+[rank6]:   File "/home/ubuntu/work/app4/app4/ttt/train/train.py", line 276, in main
+[rank6]:     model = TTTLlamaForCausalLM(cfg).to(device=device)
+[rank6]:             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank6]:   File "/home/ubuntu/work/app4/.venv/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1371, in to
+[rank6]:     return self._apply(convert)
+[rank6]:            ^^^^^^^^^^^^^^^^^^^^
+[rank6]:   File "/home/ubuntu/work/app4/.venv/lib/python3.12/site-packages/torch/nn/modules/module.py", line 930, in _apply
+[rank6]:     module._apply(fn)
+[rank6]:   File "/home/ubuntu/work/app4/.venv/lib/python3.12/site-packages/torch/nn/modules/module.py", line 930, in _apply
+[rank6]:     module._apply(fn)
+[rank6]:   File "/home/ubuntu/work/app4/.venv/lib/python3.12/site-packages/torch/nn/modules/module.py", line 930, in _apply
+[rank6]:     module._apply(fn)
+[rank6]:   [Previous line repeated 1 more time]
+[rank6]:   File "/home/ubuntu/work/app4/.venv/lib/python3.12/site-packages/torch/nn/modules/module.py", line 957, in _apply
+[rank6]:     param_applied = fn(param)
+[rank6]:                     ^^^^^^^^^
+[rank6]:   File "/home/ubuntu/work/app4/.venv/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1357, in convert
+[rank6]:     return t.to(
+[rank6]:            ^^^^^
+[rank6]: torch.OutOfMemoryError: CUDA out of memory. Tried to allocate 896.00 MiB. GPU 6 has a total capacity of 178.36 GiB of which 6.12 MiB is free. Including non-PyTorch memory, this process has 178.34 GiB memory in use. Of the allocated memory 177.23 GiB is allocated by PyTorch, and 488.00 KiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)
+W0111 01:11:01.952000 43107 torch/distributed/elastic/multiprocessing/api.py:908] Sending process 43246 closing signal SIGTERM
+W0111 01:11:01.953000 43107 torch/distributed/elastic/multiprocessing/api.py:908] Sending process 43247 closing signal SIGTERM
+W0111 01:11:01.954000 43107 torch/distributed/elastic/multiprocessing/api.py:908] Sending process 43248 closing signal SIGTERM
+W0111 01:11:01.954000 43107 torch/distributed/elastic/multiprocessing/api.py:908] Sending process 43249 closing signal SIGTERM
+W0111 01:11:01.954000 43107 torch/distributed/elastic/multiprocessing/api.py:908] Sending process 43250 closing signal SIGTERM
+W0111 01:11:01.954000 43107 torch/distributed/elastic/multiprocessing/api.py:908] Sending process 43252 closing signal SIGTERM
+W0111 01:11:01.955000 43107 torch/distributed/elastic/multiprocessing/api.py:908] Sending process 43253 closing signal SIGTERM
+E0111 01:11:06.595000 43107 torch/distributed/elastic/multiprocessing/api.py:882] failed (exitcode: 1) local_rank: 5 (pid: 43251) of binary: /home/ubuntu/work/app4/.venv/bin/python
+Traceback (most recent call last):
+  File "/home/ubuntu/work/app4/.venv/bin/torchrun", line 7, in <module>
+    sys.exit(main())
+             ^^^^^^
+  File "/home/ubuntu/work/app4/.venv/lib/python3.12/site-packages/torch/distributed/elastic/multiprocessing/errors/__init__.py", line 357, in wrapper
+    return f(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/work/app4/.venv/lib/python3.12/site-packages/torch/distributed/run.py", line 936, in main
+    run(args)
+  File "/home/ubuntu/work/app4/.venv/lib/python3.12/site-packages/torch/distributed/run.py", line 927, in run
+    elastic_launch(
+  File "/home/ubuntu/work/app4/.venv/lib/python3.12/site-packages/torch/distributed/launcher/api.py", line 156, in __call__
+    return launch_agent(self._config, self._entrypoint, list(args))
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/work/app4/.venv/lib/python3.12/site-packages/torch/distributed/launcher/api.py", line 293, in launch_agent
+    raise ChildFailedError(
+torch.distributed.elastic.multiprocessing.errors.ChildFailedError: 
+============================================================
+app4.ttt.train.train FAILED
+------------------------------------------------------------
+Failures:
+  <NO_OTHER_FAILURES>
+------------------------------------------------------------
+Root Cause (first observed failure):
+[0]:
+  time      : 2026-01-11_01:11:01
+  host      : 129-213-17-81
+  rank      : 5 (local_rank: 5)
+  exitcode  : 1 (pid: 43251)
+  error_file: <N/A>
+  traceback : To enable traceback see: https://pytorch.org/docs/stable/elastic/errors.html
+============================================================
+[W111 01:11:06.275700161 AllocatorConfig.cpp:28] Warning: PYTORCH_CUDA_ALLOC_CONF is deprecated, use PYTORCH_ALLOC_CONF instead (function operator())

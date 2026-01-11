@@ -1,0 +1,67 @@
+=== Step 7 acceptance (torchrun fsdp cpu) ===
+W0111 00:34:15.105000 28658 torch/distributed/run.py:803] 
+W0111 00:34:15.105000 28658 torch/distributed/run.py:803] *****************************************
+W0111 00:34:15.105000 28658 torch/distributed/run.py:803] Setting OMP_NUM_THREADS environment variable for each process to be 1 in default, to avoid your system being overloaded, please further tune the variable for optimal performance in your application as needed. 
+W0111 00:34:15.105000 28658 torch/distributed/run.py:803] *****************************************
+[Gloo] Rank 1 is connected to 1 peer ranks. Expected number of connected peer ranks is : 1
+[Gloo] Rank 0 is connected to 1 peer ranks. Expected number of connected peer ranks is : 1
+[2026-01-11 00:34:22,583][INFO][rank=0] CPU detected; config=bringup_1p3b is too large for CPU smoke. Switching to config=debug_tiny. Use --allow-large-cpu to disable.
+[2026-01-11 00:34:23,232][INFO][rank=0] step=0 loss=149.5993 lr=0.000e+00 toks/s=224.6
+/home/ubuntu/work/app4/.venv/lib/python3.12/site-packages/torch/distributed/fsdp/fully_sharded_data_parallel.py:675: FutureWarning: FSDP.state_dict_type() and FSDP.set_state_dict_type() are being deprecated. Please use APIs, get_state_dict() and set_state_dict(), which can support different parallelisms, FSDP1, FSDP2, DDP. API doc: https://pytorch.org/docs/stable/distributed.checkpoint.html#torch.distributed.checkpoint.state_dict.get_state_dict .Tutorial: https://pytorch.org/tutorials/recipes/distributed_checkpoint_recipe.html .
+  warnings.warn(
+/home/ubuntu/work/app4/.venv/lib/python3.12/site-packages/torch/distributed/fsdp/fully_sharded_data_parallel.py:675: FutureWarning: FSDP.state_dict_type() and FSDP.set_state_dict_type() are being deprecated. Please use APIs, get_state_dict() and set_state_dict(), which can support different parallelisms, FSDP1, FSDP2, DDP. API doc: https://pytorch.org/docs/stable/distributed.checkpoint.html#torch.distributed.checkpoint.state_dict.get_state_dict .Tutorial: https://pytorch.org/tutorials/recipes/distributed_checkpoint_recipe.html .
+  warnings.warn(
+/home/ubuntu/work/app4/.venv/lib/python3.12/site-packages/torch/distributed/distributed_c10d.py:860: UserWarning: `_get_pg_default_device` will be deprecated, it only stays for backward-compatiblity reason. If you need to find a device for object collectives, please use `_get_object_coll_device`. If you need to query the device types supported by group, please use `_device_capability(group)`. 
+  warnings.warn(
+/home/ubuntu/work/app4/.venv/lib/python3.12/site-packages/torch/distributed/distributed_c10d.py:904: UserWarning: Multiple backends are registered with this ProcessGroup. We cannot determine which one is the default. Returning cpu. Please consider using other APIs.
+  warnings.warn(
+/home/ubuntu/work/app4/.venv/lib/python3.12/site-packages/torch/distributed/distributed_c10d.py:860: UserWarning: `_get_pg_default_device` will be deprecated, it only stays for backward-compatiblity reason. If you need to find a device for object collectives, please use `_get_object_coll_device`. If you need to query the device types supported by group, please use `_device_capability(group)`. 
+  warnings.warn(
+/home/ubuntu/work/app4/.venv/lib/python3.12/site-packages/torch/distributed/distributed_c10d.py:904: UserWarning: Multiple backends are registered with this ProcessGroup. We cannot determine which one is the default. Returning cpu. Please consider using other APIs.
+  warnings.warn(
+/home/ubuntu/work/app4/.venv/lib/python3.12/site-packages/torch/distributed/fsdp/_state_dict_utils.py:722: FutureWarning: Please use DTensor instead and we are deprecating ShardedTensor.
+  local_shape = tensor.shape
+/home/ubuntu/work/app4/.venv/lib/python3.12/site-packages/torch/distributed/fsdp/_state_dict_utils.py:739: FutureWarning: Please use DTensor instead and we are deprecating ShardedTensor.
+  tensor.shape,
+/home/ubuntu/work/app4/.venv/lib/python3.12/site-packages/torch/distributed/fsdp/_state_dict_utils.py:741: FutureWarning: Please use DTensor instead and we are deprecating ShardedTensor.
+  tensor.dtype,
+/home/ubuntu/work/app4/.venv/lib/python3.12/site-packages/torch/distributed/fsdp/_state_dict_utils.py:722: FutureWarning: Please use DTensor instead and we are deprecating ShardedTensor.
+  local_shape = tensor.shape
+/home/ubuntu/work/app4/.venv/lib/python3.12/site-packages/torch/distributed/fsdp/_state_dict_utils.py:739: FutureWarning: Please use DTensor instead and we are deprecating ShardedTensor.
+  tensor.shape,
+/home/ubuntu/work/app4/.venv/lib/python3.12/site-packages/torch/distributed/fsdp/_state_dict_utils.py:741: FutureWarning: Please use DTensor instead and we are deprecating ShardedTensor.
+  tensor.dtype,
+/home/ubuntu/work/app4/.venv/lib/python3.12/site-packages/torch/overrides.py:1750: FutureWarning: Please use DTensor instead and we are deprecating ShardedTensor.
+  result = torch_func_method(public_api, types, args, kwargs)
+/home/ubuntu/work/app4/.venv/lib/python3.12/site-packages/torch/overrides.py:1750: FutureWarning: Please use DTensor instead and we are deprecating ShardedTensor.
+  result = torch_func_method(public_api, types, args, kwargs)
+
+=== Step 8 acceptance (real data cpu) ===
+[2026-01-11 00:34:31,798][INFO][rank=0] CPU detected; config=bringup_1p3b is too large for CPU smoke. Switching to config=debug_tiny. Use --allow-large-cpu to disable.
+[2026-01-11 00:34:32,550][INFO][rank=0] step=0 loss=165.1313 lr=0.000e+00 toks/s=501.5
+[2026-01-11 00:34:34,080][INFO][rank=0] step=10 loss=143.3890 lr=3.000e-05 toks/s=788.9
+[2026-01-11 00:34:35,661][INFO][rank=0] step=20 loss=79.8651 lr=6.000e-05 toks/s=798.6
+[2026-01-11 00:34:37,199][INFO][rank=0] step=30 loss=18.3825 lr=9.000e-05 toks/s=809.2
+[2026-01-11 00:34:38,816][INFO][rank=0] step=40 loss=0.0793 lr=1.200e-04 toks/s=804.8
+[2026-01-11 00:34:40,539][INFO][rank=0] step=50 loss=0.2659 lr=1.500e-04 toks/s=791.8
+[2026-01-11 00:34:42,275][INFO][rank=0] step=60 loss=0.0601 lr=1.800e-04 toks/s=782.3
+[2026-01-11 00:34:44,077][INFO][rank=0] step=70 loss=0.0001 lr=2.100e-04 toks/s=771.4
+[2026-01-11 00:34:45,892][INFO][rank=0] step=80 loss=0.0010 lr=2.400e-04 toks/s=762.5
+[2026-01-11 00:34:47,664][INFO][rank=0] step=90 loss=0.0000 lr=2.700e-04 toks/s=757.9
+[2026-01-11 00:34:49,597][INFO][rank=0] step=100 loss=0.0054 lr=3.000e-04 toks/s=747.2
+[2026-01-11 00:34:51,352][INFO][rank=0] step=110 loss=0.0000 lr=2.927e-04 toks/s=745.5
+[2026-01-11 00:34:53,129][INFO][rank=0] step=120 loss=0.0001 lr=2.714e-04 toks/s=743.4
+[2026-01-11 00:34:54,860][INFO][rank=0] step=130 loss=0.0000 lr=2.382e-04 toks/s=743.1
+[2026-01-11 00:34:56,494][INFO][rank=0] step=140 loss=0.0000 lr=1.964e-04 toks/s=745.8
+[2026-01-11 00:34:58,134][INFO][rank=0] step=150 loss=0.0000 lr=1.500e-04 toks/s=748.0
+[2026-01-11 00:34:59,765][INFO][rank=0] step=160 loss=0.0000 lr=1.036e-04 toks/s=750.2
+[2026-01-11 00:35:01,371][INFO][rank=0] step=170 loss=0.0000 lr=6.183e-05 toks/s=752.8
+[2026-01-11 00:35:02,996][INFO][rank=0] step=180 loss=0.0000 lr=2.865e-05 toks/s=754.6
+[2026-01-11 00:35:04,582][INFO][rank=0] step=190 loss=0.0000 lr=7.342e-06 toks/s=757.2
+[2026-01-11 00:35:06,040][INFO][rank=0] step=199 loss=0.0000 lr=7.402e-08 toks/s=758.6
+
+=== Step 9 bench (cuda bf16) ===
+shape: B=16 H=64 d=128 b=16 dtype=torch.bfloat16 device=cuda
+    dual      522046.8 tokens/s   peak_mem=   299.0 MB
+  primal       67717.3 tokens/s   peak_mem=   449.5 MB
+speedup: 7.71x (dual/primal)

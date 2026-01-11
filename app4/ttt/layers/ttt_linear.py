@@ -204,6 +204,7 @@ class TTTLinearMixer(nn.Module):
 
         self.rope = RotaryEmbedding(cfg.head_dim, theta=cfg.rope_theta)
 
+    @torch.no_grad()
     def init_state(
         self, batch_size: int, *, device: torch.device, dtype: torch.dtype
     ) -> torch.Tensor:

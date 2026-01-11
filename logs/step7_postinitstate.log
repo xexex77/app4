@@ -1,0 +1,117 @@
+W0111 01:02:33.184000 40928 torch/distributed/run.py:803] 
+W0111 01:02:33.184000 40928 torch/distributed/run.py:803] *****************************************
+W0111 01:02:33.184000 40928 torch/distributed/run.py:803] Setting OMP_NUM_THREADS environment variable for each process to be 1 in default, to avoid your system being overloaded, please further tune the variable for optimal performance in your application as needed. 
+W0111 01:02:33.184000 40928 torch/distributed/run.py:803] *****************************************
+[Gloo] Rank 0 is connected to 1 peer ranks. Expected number of connected peer ranks is : 1
+[Gloo] Rank 1 is connected to 1 peer ranks. Expected number of connected peer ranks is : 1
+[2026-01-11 01:02:40,583][INFO][rank=0] CPU detected; config=bringup_1p3b is too large for CPU smoke. Switching to config=debug_tiny. Use --allow-large-cpu to disable.
+[rank0]: Traceback (most recent call last):
+[rank0]:   File "<frozen runpy>", line 198, in _run_module_as_main
+[rank0]:   File "<frozen runpy>", line 88, in _run_code
+[rank0]:   File "/home/ubuntu/work/app4/app4/ttt/train/train.py", line 386, in <module>
+[rank0]:     main()
+[rank0]:   File "/home/ubuntu/work/app4/app4/ttt/train/train.py", line 327, in main
+[rank0]:     logits, _ = model(input_ids, cache=None, use_dual=True, checkpoint_ttt=True)
+[rank0]:                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank0]:   File "/home/ubuntu/work/app4/.venv/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1775, in _wrapped_call_impl
+[rank0]:     return self._call_impl(*args, **kwargs)
+[rank0]:            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank0]:   File "/home/ubuntu/work/app4/.venv/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1786, in _call_impl
+[rank0]:     return forward_call(*args, **kwargs)
+[rank0]:            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank0]:   File "/home/ubuntu/work/app4/.venv/lib/python3.12/site-packages/torch/distributed/fsdp/fully_sharded_data_parallel.py", line 851, in forward
+[rank0]:     output = self._fsdp_wrapped_module(*args, **kwargs)
+[rank0]:              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank0]:   File "/home/ubuntu/work/app4/.venv/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1775, in _wrapped_call_impl
+[rank0]:     return self._call_impl(*args, **kwargs)
+[rank0]:            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank0]:   File "/home/ubuntu/work/app4/.venv/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1786, in _call_impl
+[rank0]:     return forward_call(*args, **kwargs)
+[rank0]:            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank0]:   File "/home/ubuntu/work/app4/app4/ttt/model/llama_ttt.py", line 144, in forward
+[rank0]:     cache = self.init_cache(b, device=x.device, dtype=x.dtype)
+[rank0]:             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank0]:   File "/home/ubuntu/work/app4/app4/ttt/model/llama_ttt.py", line 122, in init_cache
+[rank0]:     _unwrap_fsdp(layer).init_state(batch_size, device=device, dtype=torch.float32)
+[rank0]:   File "/home/ubuntu/work/app4/app4/ttt/model/llama_ttt.py", line 75, in init_state
+[rank0]:     return self.mixer.init_state(batch_size, device=device, dtype=dtype)
+[rank0]:            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank0]:   File "/home/ubuntu/work/app4/.venv/lib/python3.12/site-packages/torch/utils/_contextlib.py", line 120, in decorate_context
+[rank0]:     return func(*args, **kwargs)
+[rank0]:            ^^^^^^^^^^^^^^^^^^^^^
+[rank0]:   File "/home/ubuntu/work/app4/app4/ttt/layers/ttt_linear.py", line 214, in init_state
+[rank0]:     return w0.unsqueeze(0).expand(batch_size, -1, -1, -1).clone()
+[rank0]:            ^^^^^^^^^^^^^^^
+[rank0]: RuntimeError: setStorage: sizes [1, 4, 64, 64], strides [16384, 4096, 64, 1], storage offset 512, and itemsize 4 requiring a storage size of 67584 are out of bounds for storage of size 0
+[rank1]: Traceback (most recent call last):
+[rank1]:   File "<frozen runpy>", line 198, in _run_module_as_main
+[rank1]:   File "<frozen runpy>", line 88, in _run_code
+[rank1]:   File "/home/ubuntu/work/app4/app4/ttt/train/train.py", line 386, in <module>
+[rank1]:     main()
+[rank1]:   File "/home/ubuntu/work/app4/app4/ttt/train/train.py", line 327, in main
+[rank1]:     logits, _ = model(input_ids, cache=None, use_dual=True, checkpoint_ttt=True)
+[rank1]:                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank1]:   File "/home/ubuntu/work/app4/.venv/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1775, in _wrapped_call_impl
+[rank1]:     return self._call_impl(*args, **kwargs)
+[rank1]:            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank1]:   File "/home/ubuntu/work/app4/.venv/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1786, in _call_impl
+[rank1]:     return forward_call(*args, **kwargs)
+[rank1]:            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank1]:   File "/home/ubuntu/work/app4/.venv/lib/python3.12/site-packages/torch/distributed/fsdp/fully_sharded_data_parallel.py", line 851, in forward
+[rank1]:     output = self._fsdp_wrapped_module(*args, **kwargs)
+[rank1]:              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank1]:   File "/home/ubuntu/work/app4/.venv/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1775, in _wrapped_call_impl
+[rank1]:     return self._call_impl(*args, **kwargs)
+[rank1]:            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank1]:   File "/home/ubuntu/work/app4/.venv/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1786, in _call_impl
+[rank1]:     return forward_call(*args, **kwargs)
+[rank1]:            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank1]:   File "/home/ubuntu/work/app4/app4/ttt/model/llama_ttt.py", line 144, in forward
+[rank1]:     cache = self.init_cache(b, device=x.device, dtype=x.dtype)
+[rank1]:             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank1]:   File "/home/ubuntu/work/app4/app4/ttt/model/llama_ttt.py", line 122, in init_cache
+[rank1]:     _unwrap_fsdp(layer).init_state(batch_size, device=device, dtype=torch.float32)
+[rank1]:   File "/home/ubuntu/work/app4/app4/ttt/model/llama_ttt.py", line 75, in init_state
+[rank1]:     return self.mixer.init_state(batch_size, device=device, dtype=dtype)
+[rank1]:            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank1]:   File "/home/ubuntu/work/app4/.venv/lib/python3.12/site-packages/torch/utils/_contextlib.py", line 120, in decorate_context
+[rank1]:     return func(*args, **kwargs)
+[rank1]:            ^^^^^^^^^^^^^^^^^^^^^
+[rank1]:   File "/home/ubuntu/work/app4/app4/ttt/layers/ttt_linear.py", line 214, in init_state
+[rank1]:     return w0.unsqueeze(0).expand(batch_size, -1, -1, -1).clone()
+[rank1]:            ^^^^^^^^^^^^^^^
+[rank1]: RuntimeError: setStorage: sizes [1, 4, 64, 64], strides [16384, 4096, 64, 1], storage offset 512, and itemsize 4 requiring a storage size of 67584 are out of bounds for storage of size 0
+W0111 01:02:41.439000 40928 torch/distributed/elastic/multiprocessing/api.py:908] Sending process 41044 closing signal SIGTERM
+E0111 01:02:41.471000 40928 torch/distributed/elastic/multiprocessing/api.py:882] failed (exitcode: 1) local_rank: 1 (pid: 41045) of binary: /home/ubuntu/work/app4/.venv/bin/python
+Traceback (most recent call last):
+  File "/home/ubuntu/work/app4/.venv/bin/torchrun", line 7, in <module>
+    sys.exit(main())
+             ^^^^^^
+  File "/home/ubuntu/work/app4/.venv/lib/python3.12/site-packages/torch/distributed/elastic/multiprocessing/errors/__init__.py", line 357, in wrapper
+    return f(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/work/app4/.venv/lib/python3.12/site-packages/torch/distributed/run.py", line 936, in main
+    run(args)
+  File "/home/ubuntu/work/app4/.venv/lib/python3.12/site-packages/torch/distributed/run.py", line 927, in run
+    elastic_launch(
+  File "/home/ubuntu/work/app4/.venv/lib/python3.12/site-packages/torch/distributed/launcher/api.py", line 156, in __call__
+    return launch_agent(self._config, self._entrypoint, list(args))
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/work/app4/.venv/lib/python3.12/site-packages/torch/distributed/launcher/api.py", line 293, in launch_agent
+    raise ChildFailedError(
+torch.distributed.elastic.multiprocessing.errors.ChildFailedError: 
+============================================================
+app4.ttt.train.train FAILED
+------------------------------------------------------------
+Failures:
+  <NO_OTHER_FAILURES>
+------------------------------------------------------------
+Root Cause (first observed failure):
+[0]:
+  time      : 2026-01-11_01:02:41
+  host      : 129-213-17-81
+  rank      : 1 (local_rank: 1)
+  exitcode  : 1 (pid: 41045)
+  error_file: <N/A>
+  traceback : To enable traceback see: https://pytorch.org/docs/stable/elastic/errors.html
+============================================================

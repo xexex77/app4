@@ -53,16 +53,18 @@ class ShardedTokenStream:
         n = int(tokens.numel())
         start = (n * self.rank) // self.world_size
         end = (n * (self.rank + 1)) // self.world_size
-        if end - start < self.seq_len + 1:
-            raise ValueError(
-                "Dataset shard too small for "
-                f"seq_len={self.seq_len} on rank={self.rank}/{self.world_size} "
-                f"(shard_tokens={end-start})."
-            )
 
         # Keep shard on CPU; the training loop moves batches to the target device.
-        self._tokens = tokens.detach().cpu().contiguous()[start:end]
+        full = tokens.detach().cpu().contiguous()
+        shard = full[start:end]
+        # If the corpus is extremely small relative to world_size, a rank's shard can be empty.
+        # Fall back to the full corpus to avoid division-by-zero / shape issues. This keeps
+        # deterministic behavior and is fine for bring-up on tiny datasets.
+        if shard.numel() == 0:
+            shard = full
+        self._tokens = shard
         self._pos = 0
+        self._base = torch.arange(self.seq_len, dtype=torch.long)
 
     def state_dict(self) -> dict[str, int]:
         return {"pos": int(self._pos)}
@@ -80,11 +82,14 @@ class ShardedTokenStream:
         out = torch.empty((self.batch_size, self.seq_len), dtype=torch.long)
         n = int(self._tokens.numel())
 
+        if n <= 0:
+            raise RuntimeError("Token stream is empty.")
+
         for b in range(self.batch_size):
-            if self._pos + self.seq_len >= n:
-                self._pos = 0
-            out[b].copy_(self._tokens[self._pos : self._pos + self.seq_len])
-            self._pos += self.seq_len
+            # Support tiny shards (n < seq_len) by wrapping around deterministically.
+            idx = (self._base + int(self._pos)) % n
+            out[b].copy_(self._tokens.index_select(0, idx))
+            self._pos = int((int(self._pos) + self.seq_len) % n)
 
         return out
 

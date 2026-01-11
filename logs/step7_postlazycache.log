@@ -1,0 +1,36 @@
+W0111 01:05:36.931000 42734 torch/distributed/run.py:803] 
+W0111 01:05:36.931000 42734 torch/distributed/run.py:803] *****************************************
+W0111 01:05:36.931000 42734 torch/distributed/run.py:803] Setting OMP_NUM_THREADS environment variable for each process to be 1 in default, to avoid your system being overloaded, please further tune the variable for optimal performance in your application as needed. 
+W0111 01:05:36.931000 42734 torch/distributed/run.py:803] *****************************************
+[Gloo] Rank 0 is connected to 1 peer ranks. Expected number of connected peer ranks is : 1
+[Gloo] Rank 1 is connected to 1 peer ranks. Expected number of connected peer ranks is : 1
+[2026-01-11 01:05:44,416][INFO][rank=0] CPU detected; config=bringup_1p3b is too large for CPU smoke. Switching to config=debug_tiny. Use --allow-large-cpu to disable.
+[2026-01-11 01:05:45,063][INFO][rank=0] step=0 loss=149.5993 lr=0.000e+00 toks/s=221.4
+/home/ubuntu/work/app4/.venv/lib/python3.12/site-packages/torch/distributed/fsdp/fully_sharded_data_parallel.py:675: FutureWarning: FSDP.state_dict_type() and FSDP.set_state_dict_type() are being deprecated. Please use APIs, get_state_dict() and set_state_dict(), which can support different parallelisms, FSDP1, FSDP2, DDP. API doc: https://pytorch.org/docs/stable/distributed.checkpoint.html#torch.distributed.checkpoint.state_dict.get_state_dict .Tutorial: https://pytorch.org/tutorials/recipes/distributed_checkpoint_recipe.html .
+  warnings.warn(
+/home/ubuntu/work/app4/.venv/lib/python3.12/site-packages/torch/distributed/fsdp/fully_sharded_data_parallel.py:675: FutureWarning: FSDP.state_dict_type() and FSDP.set_state_dict_type() are being deprecated. Please use APIs, get_state_dict() and set_state_dict(), which can support different parallelisms, FSDP1, FSDP2, DDP. API doc: https://pytorch.org/docs/stable/distributed.checkpoint.html#torch.distributed.checkpoint.state_dict.get_state_dict .Tutorial: https://pytorch.org/tutorials/recipes/distributed_checkpoint_recipe.html .
+  warnings.warn(
+/home/ubuntu/work/app4/.venv/lib/python3.12/site-packages/torch/distributed/distributed_c10d.py:860: UserWarning: `_get_pg_default_device` will be deprecated, it only stays for backward-compatiblity reason. If you need to find a device for object collectives, please use `_get_object_coll_device`. If you need to query the device types supported by group, please use `_device_capability(group)`. 
+  warnings.warn(
+/home/ubuntu/work/app4/.venv/lib/python3.12/site-packages/torch/distributed/distributed_c10d.py:904: UserWarning: Multiple backends are registered with this ProcessGroup. We cannot determine which one is the default. Returning cpu. Please consider using other APIs.
+  warnings.warn(
+/home/ubuntu/work/app4/.venv/lib/python3.12/site-packages/torch/distributed/distributed_c10d.py:860: UserWarning: `_get_pg_default_device` will be deprecated, it only stays for backward-compatiblity reason. If you need to find a device for object collectives, please use `_get_object_coll_device`. If you need to query the device types supported by group, please use `_device_capability(group)`. 
+  warnings.warn(
+/home/ubuntu/work/app4/.venv/lib/python3.12/site-packages/torch/distributed/distributed_c10d.py:904: UserWarning: Multiple backends are registered with this ProcessGroup. We cannot determine which one is the default. Returning cpu. Please consider using other APIs.
+  warnings.warn(
+/home/ubuntu/work/app4/.venv/lib/python3.12/site-packages/torch/distributed/fsdp/_state_dict_utils.py:722: FutureWarning: Please use DTensor instead and we are deprecating ShardedTensor.
+  local_shape = tensor.shape
+/home/ubuntu/work/app4/.venv/lib/python3.12/site-packages/torch/distributed/fsdp/_state_dict_utils.py:739: FutureWarning: Please use DTensor instead and we are deprecating ShardedTensor.
+  tensor.shape,
+/home/ubuntu/work/app4/.venv/lib/python3.12/site-packages/torch/distributed/fsdp/_state_dict_utils.py:741: FutureWarning: Please use DTensor instead and we are deprecating ShardedTensor.
+  tensor.dtype,
+/home/ubuntu/work/app4/.venv/lib/python3.12/site-packages/torch/distributed/fsdp/_state_dict_utils.py:722: FutureWarning: Please use DTensor instead and we are deprecating ShardedTensor.
+  local_shape = tensor.shape
+/home/ubuntu/work/app4/.venv/lib/python3.12/site-packages/torch/distributed/fsdp/_state_dict_utils.py:739: FutureWarning: Please use DTensor instead and we are deprecating ShardedTensor.
+  tensor.shape,
+/home/ubuntu/work/app4/.venv/lib/python3.12/site-packages/torch/distributed/fsdp/_state_dict_utils.py:741: FutureWarning: Please use DTensor instead and we are deprecating ShardedTensor.
+  tensor.dtype,
+/home/ubuntu/work/app4/.venv/lib/python3.12/site-packages/torch/overrides.py:1750: FutureWarning: Please use DTensor instead and we are deprecating ShardedTensor.
+  result = torch_func_method(public_api, types, args, kwargs)
+/home/ubuntu/work/app4/.venv/lib/python3.12/site-packages/torch/overrides.py:1750: FutureWarning: Please use DTensor instead and we are deprecating ShardedTensor.
+  result = torch_func_method(public_api, types, args, kwargs)

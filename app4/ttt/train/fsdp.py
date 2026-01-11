@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from functools import partial
 
 import torch
 import torch.nn as nn
@@ -26,8 +27,18 @@ def wrap_fsdp(model: nn.Module, *, cfg: FSDPConfig) -> nn.Module:
     try:
         from torch.distributed.fsdp import FullyShardedDataParallel as FSDP  # type: ignore
         from torch.distributed.fsdp import MixedPrecision, ShardingStrategy  # type: ignore
+        from torch.distributed.fsdp.wrap import transformer_auto_wrap_policy  # type: ignore
     except Exception as e:  # pragma: no cover
         raise RuntimeError("Classic FSDP is not available in this torch build.") from e
+
+    # Wrap at the transformer block level to avoid all-gathering the entire model at once.
+    # This is critical for very large configs (e.g., ~47B) on 8 GPUs.
+    from app4.ttt.model.llama_ttt import TTTLlamaBlock
+
+    auto_wrap_policy = partial(
+        transformer_auto_wrap_policy,
+        transformer_layer_cls={TTTLlamaBlock},
+    )
 
     # IMPORTANT: tie behavior to the actual module/device, not CUDA availability.
     # Step-7 gate runs `--device cpu` on GPU machines; classic FSDP must not
@@ -56,6 +67,7 @@ def wrap_fsdp(model: nn.Module, *, cfg: FSDPConfig) -> nn.Module:
         model,
         mixed_precision=mp,
         sharding_strategy=ShardingStrategy.FULL_SHARD,
+        auto_wrap_policy=auto_wrap_policy,
         device_id=device_id,
     )
 

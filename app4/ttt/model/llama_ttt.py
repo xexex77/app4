@@ -10,6 +10,28 @@ from app4.ttt.layers.ttt_linear import TTTLinearMixer, TTTLinearMixerConfig
 from app4.ttt.model.configs import TTTLMConfig
 
 
+def _unwrap_fsdp(m: nn.Module) -> nn.Module:
+    """
+    If `m` is an FSDP wrapper, return the wrapped module; else return `m`.
+
+    This keeps cache init/reset code robust when we use classic FSDP auto-wrapping
+    (e.g., wrapping each transformer block) where `self.layers[i]` becomes an FSDP module.
+    """
+    try:
+        from torch.distributed.fsdp import FullyShardedDataParallel as FSDP  # type: ignore
+    except Exception:  # pragma: no cover
+        return m
+    return m.module if isinstance(m, FSDP) else m
+
+
+def _is_fsdp(m: nn.Module) -> bool:
+    try:
+        from torch.distributed.fsdp import FullyShardedDataParallel as FSDP  # type: ignore
+    except Exception:  # pragma: no cover
+        return False
+    return isinstance(m, FSDP)
+
+
 class RMSNorm(nn.Module):
     def __init__(self, dim: int, eps: float = 1e-5):
         super().__init__()
@@ -63,12 +85,18 @@ class TTTLlamaBlock(nn.Module):
     def forward(
         self,
         x: torch.Tensor,  # (B,T,d)
-        W: torch.Tensor,  # (B,H,hd,hd)
+        W: torch.Tensor | None,  # (B,H,hd,hd)
         *,
         start_pos: int,
         use_dual: bool,
         checkpoint_ttt: bool,
     ) -> tuple[torch.Tensor, torch.Tensor]:
+        if W is None:
+            # Lazy cache init (FSDP-friendly): when blocks are FSDP-wrapped, their
+            # parameters are only materialized inside the FSDP forward. Initializing
+            # cache here avoids accessing sharded/empty parameters outside of that scope.
+            W = self.init_state(x.shape[0], device=x.device, dtype=torch.float32)
+
         h, W = self.mixer(
             self.norm1(x),
             W,
@@ -83,7 +111,7 @@ class TTTLlamaBlock(nn.Module):
 
 @dataclass
 class TTTCache:
-    W: list[torch.Tensor]
+    W: list[torch.Tensor | None]
     pos: int = 0
 
 
@@ -104,15 +132,26 @@ class TTTLlamaForCausalLM(nn.Module):
     def init_cache(self, batch_size: int, *, device: torch.device, dtype: torch.dtype) -> TTTCache:
         # Fast weights are always stored in fp32 for stability.
         # (Compute casts happen inside the mixer.)
-        W = [
-            layer.init_state(batch_size, device=device, dtype=torch.float32)
-            for layer in self.layers
-        ]
+        if any(_is_fsdp(layer) for layer in self.layers):
+            # When blocks are FSDP-wrapped, parameters may be sharded/empty outside
+            # of the FSDP forward. Defer init to each block's forward.
+            W = [None for _ in self.layers]
+        else:
+            W = [
+                layer.init_state(batch_size, device=device, dtype=torch.float32)
+                for layer in self.layers
+            ]
         return TTTCache(W=W, pos=0)
 
     def reset_cache(self, cache: TTTCache):
         cache.pos = 0
+        if any(_is_fsdp(layer) for layer in self.layers):
+            # For FSDP-wrapped blocks, re-init lazily on the next forward.
+            cache.W = [None for _ in cache.W]
+            return
+
         for i in range(len(cache.W)):
+            assert cache.W[i] is not None
             self.layers[i].mixer.reset_state_(cache.W[i])
 
     def forward(

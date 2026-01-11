@@ -1,0 +1,152 @@
+=== bringup_1p3b real data (cuda bf16 fsdp, no-save) ===
+W0111 00:44:27.303000 33688 torch/distributed/run.py:803] 
+W0111 00:44:27.303000 33688 torch/distributed/run.py:803] *****************************************
+W0111 00:44:27.303000 33688 torch/distributed/run.py:803] Setting OMP_NUM_THREADS environment variable for each process to be 1 in default, to avoid your system being overloaded, please further tune the variable for optimal performance in your application as needed. 
+W0111 00:44:27.303000 33688 torch/distributed/run.py:803] *****************************************
+/home/ubuntu/work/app4/.venv/lib/python3.12/site-packages/torch/distributed/distributed_c10d.py:4876: UserWarning: barrier(): using the device under current context. You can specify `device_id` in `init_process_group` to mute this warning.
+  warnings.warn(  # warn only once
+[rank0]:[W111 00:44:40.594643621 ProcessGroupNCCL.cpp:5072] Guessing device ID based on global rank. This can cause a hang if rank to GPU mapping is heterogeneous. You can specify device_id in init_process_group()
+[2026-01-11 00:44:50,171][INFO][rank=0] Checkpoint saving disabled (--no-save).
+[2026-01-11 00:44:52,422][INFO][rank=0] step=0 loss=651.8425 lr=0.000e+00 toks/s=56.9
+[2026-01-11 00:45:00,373][INFO][rank=0] step=10 loss=369.0472 lr=3.000e-05 toks/s=138.2
+[2026-01-11 00:45:08,158][INFO][rank=0] step=20 loss=0.0167 lr=6.000e-05 toks/s=149.7
+[2026-01-11 00:45:16,027][INFO][rank=0] step=30 loss=0.3780 lr=9.000e-05 toks/s=153.6
+[2026-01-11 00:45:23,818][INFO][rank=0] step=40 loss=0.0000 lr=1.200e-04 toks/s=156.1
+[2026-01-11 00:45:31,678][INFO][rank=0] step=50 loss=3.8740 lr=1.500e-04 toks/s=157.4
+[2026-01-11 00:45:39,514][INFO][rank=0] step=60 loss=5.8740 lr=1.800e-04 toks/s=158.3
+[2026-01-11 00:45:47,412][INFO][rank=0] step=70 loss=1.2992 lr=2.100e-04 toks/s=158.8
+[2026-01-11 00:45:55,287][INFO][rank=0] step=80 loss=0.6777 lr=2.400e-04 toks/s=159.3
+[2026-01-11 00:46:03,151][INFO][rank=0] step=90 loss=0.2205 lr=2.700e-04 toks/s=159.7
+[2026-01-11 00:46:10,227][INFO][rank=0] step=99 loss=8.2687 lr=2.970e-04 toks/s=159.9
+[rank0]:[W111 00:46:10.839146260 ProcessGroupNCCL.cpp:1524] Warning: WARNING: destroy_process_group() was not called before program exit, which can leak resources. For more info, please see https://pytorch.org/docs/stable/distributed.html#shutdown (function operator())
+
+=== mid_35b smoke (cuda bf16 fsdp, no-save) ===
+W0111 00:46:14.789000 34497 torch/distributed/run.py:803] 
+W0111 00:46:14.789000 34497 torch/distributed/run.py:803] *****************************************
+W0111 00:46:14.789000 34497 torch/distributed/run.py:803] Setting OMP_NUM_THREADS environment variable for each process to be 1 in default, to avoid your system being overloaded, please further tune the variable for optimal performance in your application as needed. 
+W0111 00:46:14.789000 34497 torch/distributed/run.py:803] *****************************************
+[2026-01-11 00:48:49,669][INFO][rank=0] Checkpoint saving disabled (--no-save).
+[2026-01-11 00:49:05,144][INFO][rank=0] step=0 loss=1270.9333 lr=0.000e+00 toks/s=1.0
+[rank0]:[W111 00:49:05.783356174 ProcessGroupNCCL.cpp:1524] Warning: WARNING: destroy_process_group() was not called before program exit, which can leak resources. For more info, please see https://pytorch.org/docs/stable/distributed.html#shutdown (function operator())
+
+=== ttt_llama_47b smoke (cuda bf16 fsdp, no-save) ===
+W0111 00:49:09.937000 35571 torch/distributed/run.py:803] 
+W0111 00:49:09.937000 35571 torch/distributed/run.py:803] *****************************************
+W0111 00:49:09.937000 35571 torch/distributed/run.py:803] Setting OMP_NUM_THREADS environment variable for each process to be 1 in default, to avoid your system being overloaded, please further tune the variable for optimal performance in your application as needed. 
+W0111 00:49:09.937000 35571 torch/distributed/run.py:803] *****************************************
+[rank0]: Traceback (most recent call last):
+[rank0]:   File "<frozen runpy>", line 198, in _run_module_as_main
+[rank0]:   File "<frozen runpy>", line 88, in _run_code
+[rank0]:   File "/home/ubuntu/work/app4/app4/ttt/train/train.py", line 368, in <module>
+[rank0]:     main()
+[rank0]:   File "/home/ubuntu/work/app4/app4/ttt/train/train.py", line 263, in main
+[rank0]:     model = TTTLlamaForCausalLM(cfg).to(device=device)
+[rank0]:             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank0]:   File "/home/ubuntu/work/app4/.venv/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1371, in to
+[rank0]:     return self._apply(convert)
+[rank0]:            ^^^^^^^^^^^^^^^^^^^^
+[rank0]:   File "/home/ubuntu/work/app4/.venv/lib/python3.12/site-packages/torch/nn/modules/module.py", line 930, in _apply
+[rank0]:     module._apply(fn)
+[rank0]:   File "/home/ubuntu/work/app4/.venv/lib/python3.12/site-packages/torch/nn/modules/module.py", line 930, in _apply
+[rank0]:     module._apply(fn)
+[rank0]:   File "/home/ubuntu/work/app4/.venv/lib/python3.12/site-packages/torch/nn/modules/module.py", line 930, in _apply
+[rank0]:     module._apply(fn)
+[rank0]:   [Previous line repeated 1 more time]
+[rank0]:   File "/home/ubuntu/work/app4/.venv/lib/python3.12/site-packages/torch/nn/modules/module.py", line 957, in _apply
+[rank0]:     param_applied = fn(param)
+[rank0]:                     ^^^^^^^^^
+[rank0]:   File "/home/ubuntu/work/app4/.venv/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1357, in convert
+[rank0]:     return t.to(
+[rank0]:            ^^^^^
+[rank0]: torch.OutOfMemoryError: CUDA out of memory. Tried to allocate 896.00 MiB. GPU 0 has a total capacity of 178.36 GiB of which 520.12 MiB is free. Including non-PyTorch memory, this process has 177.84 GiB memory in use. Of the allocated memory 177.23 GiB is allocated by PyTorch, and 8.48 MiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)
+[rank0]:[W111 00:53:41.932279550 ProcessGroupNCCL.cpp:1524] Warning: WARNING: destroy_process_group() was not called before program exit, which can leak resources. For more info, please see https://pytorch.org/docs/stable/distributed.html#shutdown (function operator())
+[rank1]: Traceback (most recent call last):
+[rank1]:   File "<frozen runpy>", line 198, in _run_module_as_main
+[rank1]:   File "<frozen runpy>", line 88, in _run_code
+[rank1]:   File "/home/ubuntu/work/app4/app4/ttt/train/train.py", line 368, in <module>
+[rank1]:     main()
+[rank1]:   File "/home/ubuntu/work/app4/app4/ttt/train/train.py", line 263, in main
+[rank1]:     model = TTTLlamaForCausalLM(cfg).to(device=device)
+[rank1]:             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank1]:   File "/home/ubuntu/work/app4/.venv/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1371, in to
+[rank1]:     return self._apply(convert)
+[rank1]:            ^^^^^^^^^^^^^^^^^^^^
+[rank1]:   File "/home/ubuntu/work/app4/.venv/lib/python3.12/site-packages/torch/nn/modules/module.py", line 930, in _apply
+[rank1]:     module._apply(fn)
+[rank1]:   File "/home/ubuntu/work/app4/.venv/lib/python3.12/site-packages/torch/nn/modules/module.py", line 930, in _apply
+[rank1]:     module._apply(fn)
+[rank1]:   File "/home/ubuntu/work/app4/.venv/lib/python3.12/site-packages/torch/nn/modules/module.py", line 930, in _apply
+[rank1]:     module._apply(fn)
+[rank1]:   [Previous line repeated 1 more time]
+[rank1]:   File "/home/ubuntu/work/app4/.venv/lib/python3.12/site-packages/torch/nn/modules/module.py", line 957, in _apply
+[rank1]:     param_applied = fn(param)
+[rank1]:                     ^^^^^^^^^
+[rank1]:   File "/home/ubuntu/work/app4/.venv/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1357, in convert
+[rank1]:     return t.to(
+[rank1]:            ^^^^^
+[rank1]: torch.OutOfMemoryError: CUDA out of memory. Tried to allocate 896.00 MiB. GPU 1 has a total capacity of 178.36 GiB of which 520.12 MiB is free. Including non-PyTorch memory, this process has 177.84 GiB memory in use. Of the allocated memory 177.23 GiB is allocated by PyTorch, and 8.48 MiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)
+[rank2]: Traceback (most recent call last):
+[rank2]:   File "<frozen runpy>", line 198, in _run_module_as_main
+[rank2]:   File "<frozen runpy>", line 88, in _run_code
+[rank2]:   File "/home/ubuntu/work/app4/app4/ttt/train/train.py", line 368, in <module>
+[rank2]:     main()
+[rank2]:   File "/home/ubuntu/work/app4/app4/ttt/train/train.py", line 263, in main
+[rank2]:     model = TTTLlamaForCausalLM(cfg).to(device=device)
+[rank2]:             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank2]:   File "/home/ubuntu/work/app4/.venv/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1371, in to
+[rank2]:     return self._apply(convert)
+[rank2]:            ^^^^^^^^^^^^^^^^^^^^
+[rank2]:   File "/home/ubuntu/work/app4/.venv/lib/python3.12/site-packages/torch/nn/modules/module.py", line 930, in _apply
+[rank2]:     module._apply(fn)
+[rank2]:   File "/home/ubuntu/work/app4/.venv/lib/python3.12/site-packages/torch/nn/modules/module.py", line 930, in _apply
+[rank2]:     module._apply(fn)
+[rank2]:   File "/home/ubuntu/work/app4/.venv/lib/python3.12/site-packages/torch/nn/modules/module.py", line 930, in _apply
+[rank2]:     module._apply(fn)
+[rank2]:   [Previous line repeated 1 more time]
+[rank2]:   File "/home/ubuntu/work/app4/.venv/lib/python3.12/site-packages/torch/nn/modules/module.py", line 957, in _apply
+[rank2]:     param_applied = fn(param)
+[rank2]:                     ^^^^^^^^^
+[rank2]:   File "/home/ubuntu/work/app4/.venv/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1357, in convert
+[rank2]:     return t.to(
+[rank2]:            ^^^^^
+[rank2]: torch.OutOfMemoryError: CUDA out of memory. Tried to allocate 896.00 MiB. GPU 2 has a total capacity of 178.36 GiB of which 520.12 MiB is free. Including non-PyTorch memory, this process has 177.84 GiB memory in use. Of the allocated memory 177.23 GiB is allocated by PyTorch, and 8.48 MiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)
+W0111 00:53:42.014000 35571 torch/distributed/elastic/multiprocessing/api.py:908] Sending process 35677 closing signal SIGTERM
+W0111 00:53:42.015000 35571 torch/distributed/elastic/multiprocessing/api.py:908] Sending process 35678 closing signal SIGTERM
+W0111 00:53:42.015000 35571 torch/distributed/elastic/multiprocessing/api.py:908] Sending process 35679 closing signal SIGTERM
+W0111 00:53:42.015000 35571 torch/distributed/elastic/multiprocessing/api.py:908] Sending process 35680 closing signal SIGTERM
+W0111 00:53:42.015000 35571 torch/distributed/elastic/multiprocessing/api.py:908] Sending process 35681 closing signal SIGTERM
+W0111 00:53:42.016000 35571 torch/distributed/elastic/multiprocessing/api.py:908] Sending process 35682 closing signal SIGTERM
+W0111 00:53:42.016000 35571 torch/distributed/elastic/multiprocessing/api.py:908] Sending process 35683 closing signal SIGTERM
+E0111 00:53:44.651000 35571 torch/distributed/elastic/multiprocessing/api.py:882] failed (exitcode: 1) local_rank: 0 (pid: 35676) of binary: /home/ubuntu/work/app4/.venv/bin/python
+Traceback (most recent call last):
+  File "/home/ubuntu/work/app4/.venv/bin/torchrun", line 7, in <module>
+    sys.exit(main())
+             ^^^^^^
+  File "/home/ubuntu/work/app4/.venv/lib/python3.12/site-packages/torch/distributed/elastic/multiprocessing/errors/__init__.py", line 357, in wrapper
+    return f(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/work/app4/.venv/lib/python3.12/site-packages/torch/distributed/run.py", line 936, in main
+    run(args)
+  File "/home/ubuntu/work/app4/.venv/lib/python3.12/site-packages/torch/distributed/run.py", line 927, in run
+    elastic_launch(
+  File "/home/ubuntu/work/app4/.venv/lib/python3.12/site-packages/torch/distributed/launcher/api.py", line 156, in __call__
+    return launch_agent(self._config, self._entrypoint, list(args))
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/work/app4/.venv/lib/python3.12/site-packages/torch/distributed/launcher/api.py", line 293, in launch_agent
+    raise ChildFailedError(
+torch.distributed.elastic.multiprocessing.errors.ChildFailedError: 
+============================================================
+app4.ttt.train.train FAILED
+------------------------------------------------------------
+Failures:
+  <NO_OTHER_FAILURES>
+------------------------------------------------------------
+Root Cause (first observed failure):
+[0]:
+  time      : 2026-01-11_00:53:42
+  host      : 129-213-17-81
+  rank      : 0 (local_rank: 0)
+  exitcode  : 1 (pid: 35676)
+  error_file: <N/A>
+  traceback : To enable traceback see: https://pytorch.org/docs/stable/elastic/errors.html
+============================================================

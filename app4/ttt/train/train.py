@@ -49,6 +49,7 @@ class TrainArgs:
     tokenizer_model: str | None
     tokenizer_vocab_size: int | None
     save_every: int
+    no_save: bool
     ckpt_dir: str
     resume: str | None
     allow_large_cpu: bool
@@ -56,6 +57,7 @@ class TrainArgs:
 
 def setup_dist(*, device: torch.device | None = None):
     if "RANK" in os.environ and "WORLD_SIZE" in os.environ:
+        local_rank = int(os.environ.get("LOCAL_RANK", "0"))
         init_method = os.environ.get("APP4_DIST_INIT_METHOD")
         if device is not None:
             # IMPORTANT: backend must follow the requested device, not mere CUDA availability.
@@ -69,12 +71,21 @@ def setup_dist(*, device: torch.device | None = None):
                 backend = "gloo"
         else:
             backend = "nccl" if torch.cuda.is_available() else "gloo"
+
+        device_id = None
+        if device is not None and device.type == "cuda":
+            # IMPORTANT: set the local CUDA device *before* initializing NCCL, and pass
+            # device_id to init_process_group to avoid barrier/device mapping warnings.
+            torch.cuda.set_device(local_rank)
+            device_id = local_rank
+
         if init_method:
             dist.init_process_group(
                 backend=backend,
                 init_method=init_method,
                 rank=int(os.environ["RANK"]),
                 world_size=int(os.environ["WORLD_SIZE"]),
+                device_id=device_id,
             )
         else:
             # On some Windows wheels, env:// rendezvous uses TCPStore(use_libuv=True) and fails
@@ -92,11 +103,14 @@ def setup_dist(*, device: torch.device | None = None):
                     init_method=f"file:///{str(init_file).replace(os.sep, '/')}",
                     rank=rank,
                     world_size=world,
+                    device_id=device_id,
                 )
             else:
-                dist.init_process_group(backend=backend, init_method="env://")
-        if device is not None and device.type == "cuda":
-            torch.cuda.set_device(int(os.environ.get("LOCAL_RANK", "0")))
+                dist.init_process_group(
+                    backend=backend,
+                    init_method="env://",
+                    device_id=device_id,
+                )
 
 
 def is_rank0() -> bool:
@@ -155,6 +169,11 @@ def parse_args() -> TrainArgs:
         ),
     )
     p.add_argument("--save-every", type=int, default=200)
+    p.add_argument(
+        "--no-save",
+        action="store_true",
+        help="Disable all training checkpoint writes (including the final checkpoint).",
+    )
     p.add_argument("--ckpt-dir", type=str, default="checkpoints/run1")
     p.add_argument("--resume", type=str, default=None)
     p.add_argument(
@@ -183,6 +202,7 @@ def parse_args() -> TrainArgs:
         tokenizer_model=args.tokenizer_model,
         tokenizer_vocab_size=args.tokenizer_vocab_size,
         save_every=args.save_every,
+        no_save=bool(args.no_save),
         ckpt_dir=args.ckpt_dir,
         resume=args.resume,
         allow_large_cpu=bool(args.allow_large_cpu),
@@ -253,9 +273,11 @@ def main():
             tokens, seq_len=a.seq_len, batch_size=a.batch_size, rank=rank, world_size=world
         )
 
-    model = TTTLlamaForCausalLM(cfg).to(device=device)
+    model = TTTLlamaForCausalLM(cfg)
     if a.precision == "bf16" and device.type == "cuda":
+        # Avoid materializing fp32 weights on GPU first (can OOM for very large configs).
         model = model.to(dtype=torch.bfloat16)
+    model = model.to(device=device)
 
     # FSDP wrap (classic FSDP only in v1)
     if a.strategy == "fsdp":
@@ -279,6 +301,9 @@ def main():
     model.train()
     t0 = time.time()
     tokens = 0
+
+    if is_rank0() and a.no_save:
+        log_rank0(logger, "Checkpoint saving disabled (--no-save).")
 
     for step in range(start_step, a.steps):
         lr_scale = cosine_with_warmup(step, warmup=a.warmup, total=a.steps)
@@ -327,7 +352,7 @@ def main():
 
         # NOTE: under FSDP, state_dict collection uses collective comms; all ranks must
         # participate even if only rank0 writes metadata.
-        if a.save_every > 0 and step > 0 and (step % a.save_every == 0):
+        if (not a.no_save) and a.save_every > 0 and step > 0 and (step % a.save_every == 0):
             extra = {"data_state": token_stream.state_dict() if token_stream is not None else None}
             save_checkpoint(
                 a.ckpt_dir,
@@ -340,17 +365,23 @@ def main():
                 rng_state=get_rng_state(),
             )
 
-    extra = {"data_state": token_stream.state_dict() if token_stream is not None else None}
-    save_checkpoint(
-        a.ckpt_dir,
-        model=model,
-        optimizer=optim,
-        scheduler=None,
-        step=a.steps,
-        cfg=cfg,
-        extra=extra,
-        rng_state=get_rng_state(),
-    )
+    if not a.no_save:
+        extra = {"data_state": token_stream.state_dict() if token_stream is not None else None}
+        save_checkpoint(
+            a.ckpt_dir,
+            model=model,
+            optimizer=optim,
+            scheduler=None,
+            step=a.steps,
+            cfg=cfg,
+            extra=extra,
+            rng_state=get_rng_state(),
+        )
+
+    # Clean shutdown to avoid NCCL/Gloo resource leak warnings.
+    if dist.is_available() and dist.is_initialized():
+        dist.barrier()
+        dist.destroy_process_group()
 
 
 if __name__ == "__main__":
