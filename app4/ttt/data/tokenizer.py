@@ -9,6 +9,9 @@ class Tokenizer(Protocol):
     @property
     def vocab_size(self) -> int: ...
 
+    @property
+    def eos_id(self) -> int: ...
+
     def encode(self, text: str) -> list[int]: ...
 
     def decode(self, ids: list[int]) -> str: ...
@@ -36,6 +39,17 @@ class SentencePieceTokenizer:
     @property
     def vocab_size(self) -> int:
         return int(self._spm.get_piece_size())
+
+    @property
+    def eos_id(self) -> int:
+        eos = int(self._spm.eos_id())
+        if eos >= 0:
+            return eos
+        # Some models may not set eos_id but still have a conventional </s> piece.
+        alt = int(self._spm.piece_to_id("</s>"))
+        if alt >= 0:
+            return alt
+        raise ValueError("SentencePiece model does not define an EOS id.")
 
     def encode(self, text: str) -> list[int]:
         return list(self._spm.encode(text, out_type=int))
@@ -96,6 +110,11 @@ class ByteTokenizer:
     @property
     def vocab_size(self) -> int:
         return 256
+
+    @property
+    def eos_id(self) -> int:
+        # 0 byte (NUL) is effectively unused in UTF-8 text corpora; treat it as EOS.
+        return 0
 
     def encode(self, text: str) -> list[int]:
         return list(text.encode("utf-8", errors="replace"))

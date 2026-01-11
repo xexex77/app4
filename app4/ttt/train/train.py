@@ -258,7 +258,7 @@ def parse_args() -> TrainArgs:
     p.add_argument(
         "--tokenizer",
         type=str,
-        choices=["bytes", "spm_train", "spm_model"],
+        choices=["bytes", "spm_train", "spm_load", "spm_model"],
         default=None,
         help="Tokenizer backend (required when --dataset is set).",
     )
@@ -266,7 +266,7 @@ def parse_args() -> TrainArgs:
         "--tokenizer-model",
         type=str,
         default=None,
-        help="Path to a SentencePiece .model (spm_model).",
+        help="Path to a SentencePiece .model (spm_load).",
     )
     p.add_argument(
         "--tokenizer-vocab-size",
@@ -380,9 +380,9 @@ def main():
             if dist.is_available() and dist.is_initialized():
                 dist.barrier()
             tokenizer = SentencePieceTokenizer(model_file)
-        elif a.tokenizer == "spm_model":
+        elif a.tokenizer in {"spm_load", "spm_model"}:
             if not a.tokenizer_model:
-                raise ValueError("--tokenizer-model is required for --tokenizer spm_model.")
+                raise ValueError("--tokenizer-model is required for --tokenizer spm_load.")
             tokenizer = SentencePieceTokenizer(a.tokenizer_model)
         else:
             raise ValueError(f"Unsupported tokenizer: {a.tokenizer!r}")
