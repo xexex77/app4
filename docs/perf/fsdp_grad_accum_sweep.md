@@ -44,4 +44,6 @@ Raw logs (not committed):
 Takeaways:
 - On this workload/config, **N=2 and N=4 did not improve end-to-end toks/s** vs N=1.
 - `peak_mem_gb` increased substantially for N>1, leaving very little headroom.
+- Checkpointing: **no extra grad-accum state** is required because checkpoints are only written
+  at **optimizer-step boundaries** (i.e., not mid-microstep).
 
