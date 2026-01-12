@@ -39,8 +39,7 @@ def layer_norm(
     b = _as_broadcastable(bias, x)
 
     x_f = x.float() if x.dtype in (torch.float16, torch.bfloat16) else x
-    mu = x_f.mean(dim=-1, keepdim=True)
-    var = x_f.var(dim=-1, keepdim=True, unbiased=False)
+    var, mu = torch.var_mean(x_f, dim=-1, keepdim=True, unbiased=False)
     rstd = torch.rsqrt(var + eps)
     xhat = (x_f - mu) * rstd
 
@@ -51,6 +50,81 @@ def layer_norm(
         y = y + (b.float() if y.dtype == torch.float32 and b.dtype != torch.float32 else b)
 
     return y.to(dtype=x.dtype)
+
+
+def layer_norm_with_stats(
+    x: torch.Tensor,
+    weight: torch.Tensor | None,
+    bias: torch.Tensor | None,
+    eps: float,
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    """
+    LayerNorm forward over the last dimension, returning reusable statistics.
+
+    Returns:
+    - y: normalized (+ affine) output, dtype matches x
+    - xhat: normalized x (float32 when x is fp16/bf16)
+    - rstd: reciprocal stddev (float32 when x is fp16/bf16)
+
+    This is useful when you need LN(x) and LN_backward(x, dy) and want to avoid
+    recomputing mean/var twice.
+    """
+    w = _as_broadcastable(weight, x)
+    b = _as_broadcastable(bias, x)
+
+    x_f = x.float() if x.dtype in (torch.float16, torch.bfloat16) else x
+    var, mu = torch.var_mean(x_f, dim=-1, keepdim=True, unbiased=False)
+    rstd = torch.rsqrt(var + eps)
+    xhat = (x_f - mu) * rstd
+
+    y = xhat
+    if w is not None:
+        y = y * (w.float() if y.dtype == torch.float32 and w.dtype != torch.float32 else w)
+    if b is not None:
+        y = y + (b.float() if y.dtype == torch.float32 and b.dtype != torch.float32 else b)
+
+    return y.to(dtype=x.dtype), xhat, rstd
+
+
+def layer_norm_backward_from_stats(
+    dy: torch.Tensor,
+    xhat: torch.Tensor,
+    rstd: torch.Tensor,
+    weight: torch.Tensor | None,
+) -> torch.Tensor:
+    """
+    Backward for LayerNorm over the last dim: returns dx given upstream dy and
+    cached (xhat, rstd) from `layer_norm_with_stats`.
+
+    Supports x shaped (B,H,T,d) with weight shaped (H,d) or (d,).
+    """
+    if dy.shape != xhat.shape:
+        raise ValueError(
+            "dy and xhat must have identical shapes; "
+            f"got dy={tuple(dy.shape)} xhat={tuple(xhat.shape)}"
+        )
+    if rstd.ndim != dy.ndim or rstd.shape[:-1] != dy.shape[:-1] or rstd.shape[-1] != 1:
+        raise ValueError(
+            "rstd must be broadcastable over the last dim of dy (i.e., shape (..., 1)); "
+            f"got dy={tuple(dy.shape)} rstd={tuple(rstd.shape)}"
+        )
+
+    w = _as_broadcastable(weight, dy)
+
+    dy_f = dy.float() if dy.dtype in (torch.float16, torch.bfloat16) else dy
+    xhat_f = xhat.float() if xhat.dtype in (torch.float16, torch.bfloat16) else xhat
+    rstd_f = rstd.float() if rstd.dtype in (torch.float16, torch.bfloat16) else rstd
+
+    if w is not None:
+        w_f = w.float() if w.dtype in (torch.float16, torch.bfloat16) else w
+        dy_f = dy_f * w_f
+
+    d = dy.shape[-1]
+    dy_sum = dy_f.sum(dim=-1, keepdim=True)
+    dy_xhat_sum = (dy_f * xhat_f).sum(dim=-1, keepdim=True)
+
+    dx = (dy_f - dy_sum / d - xhat_f * dy_xhat_sum / d) * rstd_f
+    return dx.to(dtype=dy.dtype)
 
 
 def layer_norm_backward(
@@ -76,8 +150,7 @@ def layer_norm_backward(
     x_f = x.float() if x.dtype in (torch.float16, torch.bfloat16) else x
     dy_f = dy.float() if dy.dtype in (torch.float16, torch.bfloat16) else dy
 
-    mu = x_f.mean(dim=-1, keepdim=True)
-    var = x_f.var(dim=-1, keepdim=True, unbiased=False)
+    var, mu = torch.var_mean(x_f, dim=-1, keepdim=True, unbiased=False)
     rstd = torch.rsqrt(var + eps)
     xhat = (x_f - mu) * rstd
 

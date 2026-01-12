@@ -566,8 +566,9 @@ def main():
         log_rank0(logger, "Checkpoint saving disabled (--no-save).")
 
     prof = None
+    prof_run_dir: Path | None = None
     if a.profile_steps > 0 and device.type == "cuda":
-        from torch.profiler import ProfilerActivity, profile, tensorboard_trace_handler
+        from torch.profiler import ProfilerActivity, profile
 
         base = Path(os.path.expanduser("~/runs/prof"))
         run_dir = (
@@ -578,6 +579,7 @@ def main():
         if is_rank0():
             run_dir.mkdir(parents=True, exist_ok=True)
             log_rank0(logger, f"Profiler enabled: profile_steps={a.profile_steps} dir={run_dir}")
+            prof_run_dir = run_dir
         if dist.is_available() and dist.is_initialized():
             dist.barrier()
 
@@ -588,7 +590,6 @@ def main():
                 # Skip the very first step (init/allocator churn), then profile N steps.
                 wait=1, warmup=1, active=int(a.profile_steps), repeat=1
             ),
-            on_trace_ready=(tensorboard_trace_handler(str(run_dir)) if is_rank0() else None),
             record_shapes=False,
             # Memory profiling explodes trace size for large models; keep it off by default.
             profile_memory=False,
@@ -730,18 +731,6 @@ def main():
     finally:
         if prof is not None:
             prof.__exit__(None, None, None)
-            if is_rank0():
-                try:
-                    table = prof.key_averages().table(
-                        sort_by="self_cuda_time_total",
-                        row_limit=20,
-                    )
-                    log_rank0(
-                        logger,
-                        "\n" + table,
-                    )
-                except Exception:
-                    pass
 
     if not a.no_save:
         extra = {"data_state": token_stream.state_dict() if token_stream is not None else None}
@@ -787,6 +776,21 @@ def main():
     if dist.is_available() and dist.is_initialized():
         dist.barrier()
         dist.destroy_process_group()
+
+    # NOTE: exporting profiler traces can take a long time (GBs of JSON). Do it only
+    # on rank0 *after* tearing down the process group so other ranks aren't stuck in
+    # barriers waiting for rank0 (avoids NCCL timeouts).
+    if prof is not None and prof_run_dir is not None and is_rank0():
+        try:
+            # Prefer tensorboard trace handler here: for very large traces,
+            # export_chrome_trace() can spend a long time building the full JSON
+            # in memory before writing. The TB handler streams more reliably.
+            from torch.profiler import tensorboard_trace_handler
+
+            tensorboard_trace_handler(str(prof_run_dir))(prof)
+            log_rank0(logger, f"Profiler trace written under: {prof_run_dir}")
+        except Exception as e:
+            log_rank0(logger, f"Profiler export failed: {type(e).__name__}: {e}")
 
 
 if __name__ == "__main__":

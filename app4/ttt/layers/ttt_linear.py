@@ -6,7 +6,11 @@ import torch
 import torch.nn as nn
 import torch.utils.checkpoint as ckpt
 
-from app4.ttt.ops.layernorm import layer_norm, layer_norm_backward
+from app4.ttt.ops.layernorm import (
+    layer_norm,
+    layer_norm_backward_from_stats,
+    layer_norm_with_stats,
+)
 from app4.ttt.ops.rope import RotaryEmbedding, apply_rope
 
 
@@ -69,10 +73,10 @@ def ttt_dual_chunk_torch(
 
     # --- compute u for each token using ANCHOR weights W ---
     tK = torch.matmul(K, Wc.transpose(-1, -2))  # (B,H,b,d)
-    nK = layer_norm(tK, ln_weight, ln_bias, ln_eps)
+    nK, xhat, rstd = layer_norm_with_stats(tK, ln_weight, ln_bias, ln_eps)
     y = K + nK
     g = (2.0 / float(b)) * (y - V)
-    u = layer_norm_backward(tK, g, ln_weight, ln_eps)  # (B,H,b,d)
+    u = layer_norm_backward_from_stats(g, xhat, rstd, ln_weight)  # (B,H,b,d)
 
     # --- causal application to Q path ---
     S = torch.matmul(Q, K.transpose(-1, -2))  # (B,H,b,b), S[i,j] = q_i · k_j
@@ -115,10 +119,10 @@ def ttt_primal_chunk_anchored(
 
     # u computed once using anchor W
     tK = torch.matmul(K, Wc.transpose(-1, -2))
-    nK = layer_norm(tK, ln_weight, ln_bias, ln_eps)
+    nK, xhat, rstd = layer_norm_with_stats(tK, ln_weight, ln_bias, ln_eps)
     y = K + nK
     g = (2.0 / float(b)) * (y - V)
-    u = layer_norm_backward(tK, g, ln_weight, ln_eps)  # (B,H,b,d)
+    u = layer_norm_backward_from_stats(g, xhat, rstd, ln_weight)  # (B,H,b,d)
 
     W_i = W
     z_out = []
@@ -164,10 +168,11 @@ def ttt_primal_step(
 
     # update path
     tK = torch.matmul(k.unsqueeze(-2), Wc.transpose(-1, -2)).squeeze(-2)
-    nK = layer_norm(tK.unsqueeze(2), ln_weight, ln_bias, ln_eps).squeeze(2)
+    nK, xhat, rstd = layer_norm_with_stats(tK.unsqueeze(2), ln_weight, ln_bias, ln_eps)
+    nK = nK.squeeze(2)
     y = k + nK
     g = 2.0 * (y - v)
-    u = layer_norm_backward(tK.unsqueeze(2), g.unsqueeze(2), ln_weight, ln_eps).squeeze(2)
+    u = layer_norm_backward_from_stats(g.unsqueeze(2), xhat, rstd, ln_weight).squeeze(2)
 
     dW = eta.float().unsqueeze(-1).unsqueeze(-1) * _outer(u.float(), k.float())
     W_next = W - dW

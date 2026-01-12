@@ -4,6 +4,7 @@ This document records a minimal held-out evaluation on Tiny Shakespeare for the 
 
 ## Setup
 
+- Git SHA: `7e3ef21808a09deb928f1aa1cb2968e58f768f60`
 - Config: `ttt_llama_47b`
 - Strategy: `--strategy fsdp`
 - Precision: `--precision bf16`
