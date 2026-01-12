@@ -62,9 +62,14 @@ class TrainArgs:
     ckpt_dir: str
     resume: str | None
     allow_large_cpu: bool
+    fsdp_wrap: str
+    fsdp_bucket_cap_mb: int
+    fsdp_reshard_after_forward: int
+    fsdp_limit_all_gathers: int
     eval_only: bool
     eval_steps: int
     eval_split: float
+    eval_every: int
     profile_steps: int
     profile_dir: str | None
 
@@ -316,6 +321,37 @@ def parse_args() -> TrainArgs:
         help="Allow running very large configs on CPU (may OOM / be extremely slow).",
     )
     p.add_argument(
+        "--fsdp-wrap",
+        "--fsdp_wrap",
+        type=str,
+        choices=["auto", "block", "block2"],
+        default="auto",
+        help="FSDP wrapping policy (only used when --strategy fsdp).",
+    )
+    p.add_argument(
+        "--fsdp-bucket-cap-mb",
+        "--fsdp_bucket_cap_mb",
+        type=int,
+        default=0,
+        help="FSDP bucket cap in MB (0 uses torch default; ignored if unsupported).",
+    )
+    p.add_argument(
+        "--fsdp-reshard-after-forward",
+        "--fsdp_reshard_after_forward",
+        type=int,
+        choices=[0, 1],
+        default=1,
+        help="FSDP reshard-after-forward toggle (1=FULL_SHARD, 0=SHARD_GRAD_OP if supported).",
+    )
+    p.add_argument(
+        "--fsdp-limit-all-gathers",
+        "--fsdp_limit_all_gathers",
+        type=int,
+        choices=[0, 1],
+        default=1,
+        help="FSDP limit_all_gathers toggle (ignored if unsupported).",
+    )
+    p.add_argument(
         "--eval-only",
         action="store_true",
         help="Run evaluation on a held-out shard of --dataset and exit.",
@@ -331,6 +367,16 @@ def parse_args() -> TrainArgs:
         type=float,
         default=0.1,
         help="Fraction of dataset tokens used for eval (taken from the end) when eval is enabled.",
+    )
+    p.add_argument(
+        "--eval-every",
+        "--eval_every",
+        type=int,
+        default=0,
+        help=(
+            "Run eval every N optimizer steps during training (0 disables). "
+            "Requires --eval-steps > 0."
+        ),
     )
     p.add_argument(
         "--profile-steps",
@@ -374,9 +420,14 @@ def parse_args() -> TrainArgs:
         ckpt_dir=args.ckpt_dir,
         resume=args.resume,
         allow_large_cpu=bool(args.allow_large_cpu),
+        fsdp_wrap=str(args.fsdp_wrap),
+        fsdp_bucket_cap_mb=int(args.fsdp_bucket_cap_mb),
+        fsdp_reshard_after_forward=int(args.fsdp_reshard_after_forward),
+        fsdp_limit_all_gathers=int(args.fsdp_limit_all_gathers),
         eval_only=bool(args.eval_only),
         eval_steps=int(args.eval_steps),
         eval_split=float(args.eval_split),
+        eval_every=int(args.eval_every),
         profile_steps=int(args.profile_steps),
         profile_dir=args.profile_dir,
     )
@@ -402,6 +453,12 @@ def main():
         raise ValueError("--eval-steps must be >= 0.")
     if not (0.0 < float(a.eval_split) < 1.0):
         raise ValueError("--eval-split must be in (0, 1).")
+    if int(a.fsdp_bucket_cap_mb) < 0:
+        raise ValueError("--fsdp-bucket-cap-mb must be >= 0.")
+    if int(a.eval_every) < 0:
+        raise ValueError("--eval-every must be >= 0.")
+    if int(a.eval_every) > 0 and int(a.eval_steps) <= 0:
+        raise ValueError("--eval-every requires --eval-steps > 0.")
     if int(a.grad_accum_steps) < 1:
         raise ValueError("--grad-accum-steps must be >= 1.")
     if a.profile_steps < 0:
@@ -428,6 +485,7 @@ def main():
     tokenizer = None
     token_stream = None
     eval_stream = None
+    eval_stream_state0 = None
     cfg = base_cfg
     if a.dataset is not None:
         tok_dir = ckpt_dir / "tokenizer"
@@ -477,6 +535,9 @@ def main():
                 rank=rank,
                 world_size=world,
             )
+            # Snapshot initial eval state so periodic eval can reset and remain deterministic
+            # across calls (comparable metrics over time).
+            eval_stream_state0 = eval_stream.state_dict()
 
     model = TTTLlamaForCausalLM(cfg)
     if a.precision == "bf16" and device.type == "cuda":
@@ -486,7 +547,22 @@ def main():
 
     # FSDP wrap (classic FSDP only in v1)
     if a.strategy == "fsdp":
-        model = wrap_fsdp(model, cfg=FSDPConfig(mixed_precision=(a.precision == "bf16")))
+        bucket_cap_mb = int(a.fsdp_bucket_cap_mb)
+        fsdp_cfg = FSDPConfig(
+            mixed_precision=(a.precision == "bf16"),
+            wrap=str(a.fsdp_wrap),
+            bucket_cap_mb=(bucket_cap_mb if bucket_cap_mb > 0 else None),
+            reshard_after_forward=bool(int(a.fsdp_reshard_after_forward)),
+            limit_all_gathers=bool(int(a.fsdp_limit_all_gathers)),
+        )
+        log_rank0(
+            logger,
+            "FSDP config: "
+            f"wrap={fsdp_cfg.wrap} reshard_after_forward={int(fsdp_cfg.reshard_after_forward)} "
+            f"limit_all_gathers={int(bool(fsdp_cfg.limit_all_gathers))} "
+            f"bucket_cap_mb={fsdp_cfg.bucket_cap_mb}",
+        )
+        model = wrap_fsdp(model, cfg=fsdp_cfg)
 
     optim = AdamW(model.parameters(), lr=a.lr, weight_decay=a.weight_decay, betas=(0.9, 0.95))
 
@@ -515,14 +591,15 @@ def main():
                 token_stream.load_state_dict(data_state)
         log_rank0(logger, f"Resumed from {resume_dir} at step={start_step}")
 
-    if a.eval_only:
-        if eval_stream is None:
-            raise ValueError("--eval-only requires --dataset (and therefore an eval token stream).")
-        if resume_dir is None:
-            raise ValueError("--eval-only requires a checkpoint (use --resume auto or a path).")
+    def _eval_once(*, train_step: int | None) -> tuple[float, float, float, int]:
+        if eval_stream is None or eval_stream_state0 is None:
+            raise ValueError("--eval requires --dataset (and therefore an eval token stream).")
+
+        # Reset eval stream for deterministic comparisons.
+        eval_stream.load_state_dict(eval_stream_state0)
 
         model.eval()
-        autocast_ctx = (
+        autocast_ctx_eval = (
             torch.autocast(device_type="cuda", dtype=torch.bfloat16)
             if (a.precision == "bf16" and device.type == "cuda")
             else nullcontext()
@@ -530,7 +607,7 @@ def main():
         loss_sum = 0.0
         for i in range(int(a.eval_steps)):
             input_ids = eval_stream.next_batch().to(device=device)
-            with torch.no_grad(), autocast_ctx:
+            with torch.no_grad(), autocast_ctx_eval:
                 logits, _ = model(input_ids, cache=None, use_dual=True, checkpoint_ttt=False)
                 loss = F.cross_entropy(
                     logits[:, :-1, :].reshape(-1, cfg.vocab_size),
@@ -538,7 +615,8 @@ def main():
                 )
             if not torch.isfinite(loss.detach()):
                 raise RuntimeError(
-                    f"Non-finite eval loss at step={i}: {loss.detach().float().item()}"
+                    f"Non-finite eval loss at iter={i} train_step={train_step}: "
+                    f"{loss.detach().float().item()}"
                 )
             loss_sum += float(loss.detach().float().item())
 
@@ -547,17 +625,58 @@ def main():
             t = torch.tensor([loss_sum, float(a.eval_steps)], device=device, dtype=torch.float32)
             dist.all_reduce(t, op=dist.ReduceOp.SUM)
             loss_sum = float(t[0].item())
-            denom = float(t[1].item())
+            denom = int(t[1].item())
         else:
-            denom = float(a.eval_steps)
+            denom = int(a.eval_steps)
 
-        loss_avg = loss_sum / max(1.0, denom)
+        loss_avg = loss_sum / float(max(1, denom))
         bpb = loss_avg / math.log(2.0)
         log10_ppl = loss_avg / math.log(10.0)
+
+        # Restore train mode for the caller.
+        model.train()
+        return loss_avg, bpb, log10_ppl, denom
+
+    def _append_eval_jsonl(
+        *, train_step: int | None, loss: float, bpb: float, log10_ppl: float, denom: int
+    ):
+        if not is_rank0():
+            return
+        out_dir = Path(os.path.expanduser("~/runs/eval"))
+        out_dir.mkdir(parents=True, exist_ok=True)
+        run_name = Path(a.ckpt_dir).name or "run"
+        path = out_dir / f"{run_name}_eval.jsonl"
+        rec = {
+            "time": float(time.time()),
+            "train_step": int(train_step) if train_step is not None else None,
+            "loss_nats": float(loss),
+            "bpb": float(bpb),
+            "log10_ppl": float(log10_ppl),
+            "eval_steps_total": int(denom),
+            "eval_steps_per_rank": int(a.eval_steps),
+            "eval_split": float(a.eval_split),
+            "dataset": a.dataset,
+            "seq_len": int(a.seq_len),
+            "batch_size": int(a.batch_size),
+            "world_size": int(world),
+            "grad_accum_steps": int(a.grad_accum_steps),
+            "git_sha": _git_sha(),
+        }
+        with path.open("a", encoding="utf-8") as f:
+            f.write(json.dumps(rec) + "\n")
+
+    if a.eval_only:
+        if resume_dir is None:
+            raise ValueError("--eval-only requires a checkpoint (use --resume auto or a path).")
+
+        loss_avg, bpb, log10_ppl, denom = _eval_once(train_step=start_step)
         log_rank0(
             logger,
             f"eval loss={loss_avg:.4f} bpb={bpb:.4f} log10_ppl={log10_ppl:.4f} "
             f"eval_steps={int(denom)} eval_split={a.eval_split:.3f} dataset={a.dataset}",
+        )
+        _append_eval_jsonl(
+            train_step=start_step, loss=loss_avg, bpb=bpb, log10_ppl=log10_ppl, denom=denom
         )
 
         # Clean shutdown to avoid NCCL/Gloo resource leak warnings.
@@ -723,6 +842,26 @@ def main():
                 interval_steps = 0
                 if device.type == "cuda":
                     torch.cuda.reset_peak_memory_stats(device=device)
+
+            # Periodic eval (all ranks participate; rank0 logs + writes JSONL).
+            if (
+                (not a.eval_only)
+                and int(a.eval_every) > 0
+                and ((step + 1) % int(a.eval_every) == 0)
+            ):
+                loss_e, bpb_e, log10_ppl_e, denom = _eval_once(train_step=step + 1)
+                log_rank0(
+                    logger,
+                    f"eval@step={step+1} loss={loss_e:.4f} bpb={bpb_e:.4f} "
+                    f"log10_ppl={log10_ppl_e:.4f} eval_steps={int(denom)}",
+                )
+                _append_eval_jsonl(
+                    train_step=step + 1,
+                    loss=loss_e,
+                    bpb=bpb_e,
+                    log10_ppl=log10_ppl_e,
+                    denom=denom,
+                )
 
             # NOTE: under FSDP, state_dict collection uses collective comms; all ranks must
             # participate even if only rank0 writes metadata.
