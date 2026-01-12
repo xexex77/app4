@@ -582,13 +582,16 @@ def main():
             dist.barrier()
 
         prof = profile(
-            activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA],
+            # CUDA-only to keep traces smaller + faster and avoid multi-rank stalls.
+            activities=[ProfilerActivity.CUDA],
             schedule=torch.profiler.schedule(
-                wait=0, warmup=0, active=int(a.profile_steps), repeat=1
+                # Skip the very first step (init/allocator churn), then profile N steps.
+                wait=1, warmup=1, active=int(a.profile_steps), repeat=1
             ),
             on_trace_ready=(tensorboard_trace_handler(str(run_dir)) if is_rank0() else None),
             record_shapes=False,
-            profile_memory=True,
+            # Memory profiling explodes trace size for large models; keep it off by default.
+            profile_memory=False,
             with_stack=False,
         )
         prof.__enter__()
