@@ -54,10 +54,10 @@ Raw logs (not committed):
 
 ## Results
 
-| checkpoint | eval loss | perplexity |
-| --- | ---: | ---: |
-| step_150 | 116.2693 | ~3.1268e50 |
-| step_200 | 34.4840 | ~9.4665e14 |
+| checkpoint | eval loss (nats) | bpb (bits/byte) | log10 ppl | perplexity (raw) |
+| --- | ---: | ---: | ---: | ---: |
+| step_150 | 116.2693 | 167.7411 | 50.4951 | ~3.1268e50 |
+| step_200 | 34.4840 | 49.7499 | 14.9762 | ~9.4665e14 |
 
 Trend: **eval loss decreased from step 150 → step 200**, as expected for a short continued-train window (finite metrics, improving direction).
 

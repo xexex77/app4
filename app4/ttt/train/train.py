@@ -48,6 +48,7 @@ class TrainArgs:
     weight_decay: float
     warmup: int
     grad_clip: float
+    grad_accum_steps: int
     synthetic: bool
     dataset: str | None
     tokenizer: str | None
@@ -254,6 +255,16 @@ def parse_args() -> TrainArgs:
     p.add_argument("--weight-decay", type=float, default=0.1)
     p.add_argument("--warmup", type=int, default=100)
     p.add_argument("--grad-clip", type=float, default=1.0)
+    p.add_argument(
+        "--grad-accum-steps",
+        "--grad_accum_steps",
+        type=int,
+        default=1,
+        help=(
+            "Gradient accumulation steps per optimizer step. For FSDP, uses no_sync() for "
+            "microsteps < N."
+        ),
+    )
     p.add_argument("--synthetic", action="store_true")
     p.add_argument(
         "--dataset",
@@ -349,6 +360,7 @@ def parse_args() -> TrainArgs:
         weight_decay=args.weight_decay,
         warmup=args.warmup,
         grad_clip=args.grad_clip,
+        grad_accum_steps=int(args.grad_accum_steps),
         synthetic=bool(args.synthetic),
         dataset=args.dataset,
         tokenizer=args.tokenizer,
@@ -390,6 +402,8 @@ def main():
         raise ValueError("--eval-steps must be >= 0.")
     if not (0.0 < float(a.eval_split) < 1.0):
         raise ValueError("--eval-split must be in (0, 1).")
+    if int(a.grad_accum_steps) < 1:
+        raise ValueError("--grad-accum-steps must be >= 1.")
     if a.profile_steps < 0:
         raise ValueError("--profile-steps must be >= 0.")
     if a.profile_steps > 0 and device.type != "cuda":
@@ -538,11 +552,12 @@ def main():
             denom = float(a.eval_steps)
 
         loss_avg = loss_sum / max(1.0, denom)
-        ppl = math.exp(loss_avg)
+        bpb = loss_avg / math.log(2.0)
+        log10_ppl = loss_avg / math.log(10.0)
         log_rank0(
             logger,
-            f"eval loss={loss_avg:.4f} ppl={ppl:.2f} eval_steps={int(denom)} "
-            f"eval_split={a.eval_split:.3f} dataset={a.dataset}",
+            f"eval loss={loss_avg:.4f} bpb={bpb:.4f} log10_ppl={log10_ppl:.4f} "
+            f"eval_steps={int(denom)} eval_split={a.eval_split:.3f} dataset={a.dataset}",
         )
 
         # Clean shutdown to avoid NCCL/Gloo resource leak warnings.
@@ -552,9 +567,11 @@ def main():
         return
 
     model.train()
-    tokens = 0
     world_size = dist.get_world_size() if (dist.is_available() and dist.is_initialized()) else 1
-    tokens_per_step_global = a.batch_size * a.seq_len * world_size
+    accum = int(a.grad_accum_steps)
+    tokens_per_step_global = a.batch_size * a.seq_len * world_size * accum
+    if is_rank0() and accum > 1:
+        log_rank0(logger, f"Gradient accumulation enabled: grad_accum_steps={accum}")
 
     if device.type == "cuda":
         torch.cuda.reset_peak_memory_stats(device=device)
@@ -564,6 +581,24 @@ def main():
 
     if is_rank0() and a.no_save:
         log_rank0(logger, "Checkpoint saving disabled (--no-save).")
+
+    # Autocast (CUDA bf16) is constant across steps.
+    autocast_ctx = (
+        torch.autocast(device_type="cuda", dtype=torch.bfloat16)
+        if (a.precision == "bf16" and device.type == "cuda")
+        else nullcontext()
+    )
+
+    # FSDP no_sync (used for gradient accumulation).
+    fsdp_no_sync_fn = None
+    if a.strategy == "fsdp":
+        try:
+            from torch.distributed.fsdp import FullyShardedDataParallel as FSDP  # type: ignore
+
+            if isinstance(model, FSDP):
+                fsdp_no_sync_fn = model.no_sync
+        except Exception:
+            fsdp_no_sync_fn = None
 
     prof = None
     prof_run_dir: Path | None = None
@@ -603,35 +638,49 @@ def main():
             for pg in optim.param_groups:
                 pg["lr"] = a.lr * lr_scale
 
-            if a.dataset is not None:
-                assert token_stream is not None
-                input_ids = token_stream.next_batch().to(device=device)
-            else:
-                # synthetic next-token data
-                input_ids = torch.randint(
-                    0, cfg.vocab_size, (a.batch_size, a.seq_len), device=device, dtype=torch.long
-                )
-
-            # forward (grad always enabled; autocast only for CUDA bf16)
-            autocast_ctx = (
-                torch.autocast(device_type="cuda", dtype=torch.bfloat16)
-                if (a.precision == "bf16" and device.type == "cuda")
-                else nullcontext()
-            )
-            with autocast_ctx:
-                logits, _ = model(input_ids, cache=None, use_dual=True, checkpoint_ttt=True)
-                loss = F.cross_entropy(
-                    logits[:, :-1, :].reshape(-1, cfg.vocab_size),
-                    input_ids[:, 1:].reshape(-1),
-                )
-
             optim.zero_grad(set_to_none=True)
-            loss.backward()
+            loss_sum = 0.0
 
-            if not torch.isfinite(loss.detach()):
-                raise RuntimeError(
-                    f"Non-finite loss at step={step}: {loss.detach().float().item()}"
+            # forward/backward microsteps (accumulate grads); sync only on the final microstep
+            for micro in range(accum):
+                sync_grads = micro == (accum - 1)
+                no_sync_ctx = (
+                    fsdp_no_sync_fn()
+                    if (fsdp_no_sync_fn is not None and (not sync_grads) and accum > 1)
+                    else nullcontext()
                 )
+
+                with no_sync_ctx:
+                    if a.dataset is not None:
+                        assert token_stream is not None
+                        input_ids = token_stream.next_batch().to(device=device)
+                    else:
+                        # synthetic next-token data
+                        input_ids = torch.randint(
+                            0,
+                            cfg.vocab_size,
+                            (a.batch_size, a.seq_len),
+                            device=device,
+                            dtype=torch.long,
+                        )
+
+                    with autocast_ctx:
+                        logits, _ = model(input_ids, cache=None, use_dual=True, checkpoint_ttt=True)
+                        loss = F.cross_entropy(
+                            logits[:, :-1, :].reshape(-1, cfg.vocab_size),
+                            input_ids[:, 1:].reshape(-1),
+                        )
+
+                    if not torch.isfinite(loss.detach()):
+                        raise RuntimeError(
+                            f"Non-finite loss at step={step} micro={micro}: "
+                            f"{loss.detach().float().item()}"
+                        )
+
+                    loss_sum += float(loss.detach().float().item())
+                    (loss / float(accum)).backward()
+
+            loss_avg = loss_sum / float(max(1, accum))
 
             grad_norm = None
             if a.grad_clip > 0:
@@ -639,8 +688,6 @@ def main():
 
             optim.step()
             interval_steps += 1
-
-            tokens += a.batch_size * a.seq_len
             do_log = (
                 a.log_every > 0
                 and (step % a.log_every == 0 or step == a.steps - 1)
@@ -667,9 +714,9 @@ def main():
                 lr = float(optim.param_groups[0]["lr"])
                 log_rank0(
                     logger,
-                    f"step={step} loss={loss.detach().float().item():.4f} grad_norm={gn:.3e} "
+                    f"step={step} loss={loss_avg:.4f} grad_norm={gn:.3e} "
                     f"step_s={step_s:.3f} toks/s={toks_per_s:.1f} "
-                    f"peak_mem_gb={peak_mem_gb:.2f} lr={lr:.3e}",
+                    f"peak_mem_gb={peak_mem_gb:.2f} lr={lr:.3e} accum={accum}",
                 )
 
                 interval_t0 = time.perf_counter()
